@@ -3,22 +3,33 @@
 #include <map>
 #include <vector>
 #include <sqlite3.h>
-#include <iostream> 
+#include <iostream>
+#include <thread>
+#include <chrono>
+#include <ctime>
+#include <cstdlib>
 
 int main() {
     TgBot::Bot bot("7819743495:AAH8poZ9bSwTQC7KGF5y3yXqfvdr5Zgy0Co");
+
+    try {
+        bot.getApi().deleteWebhook();
+        std::cout << "Webhook deleted successfully." << std::endl;
+    }
+    catch (TgBot::TgException& e) {
+        std::cerr << "Failed to delete webhook: " << e.what() << std::endl;
+        return 1; 
+    }
 
     struct UserData {
         int step = 0;
         std::map<char, int> answers;
     };
 
-
     struct Question {
         std::string text;
         std::vector<std::string> options;
     };
-
 
     std::vector<Question> questions = {
         {u8"1. Что ты наденешь на встречу с друзьями?", {u8"A. Джинсы и футболка", u8"B. Модное по тренду", u8"C. Классика", u8"D. Что-то яркое"}},
@@ -33,6 +44,16 @@ int main() {
         {u8"10. Как ты выбираешь одежду?", {u8"A. Главное — удобно", u8"B. То, что в моде", u8"C. Проверенные классические вещи", u8"D. Что-то необычное и интересное"}}
     };
 
+    std::vector<std::string> styleTips = {
+        u8"👔 Совет дня: Нейтральные цвета легко комбинировать между собой!",
+        u8"👟 Совет дня: Всегда имей пару базовых белых кроссовок — это мастхэв.",
+        u8"🎨 Совет дня: Аксессуары могут оживить даже самый простой образ.",
+        u8"🧥 Совет дня: Инвестируй в качественную базовую верхнюю одежду.",
+        u8"👖 Совет дня: Прямые джинсы подходят практически для любого типа фигуры.",
+        u8"🕶 Совет дня: Очки — не только защита от солнца, но и мощный элемент стиля!",
+        u8"👜 Совет дня: Стильная сумка может стать акцентом в образе.",
+        u8"💼 Совет дня: Опрятность важнее брендов. Следи за состоянием вещей!"
+    };
 
     auto getAnswerButtons = []() -> TgBot::InlineKeyboardMarkup::Ptr {
         TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
@@ -76,10 +97,8 @@ int main() {
         std::cout << "Table created successfully" << std::endl;
     }
 
-
     auto addUserToDatabase = [&db](int64_t chat_id) {
-        std::string sql_insert = "INSERT OR IGNORE INTO users (chat_id) VALUES (" + std::to_string(chat_id) + ");";  // Используем INSERT OR IGNORE
-
+        std::string sql_insert = "INSERT OR IGNORE INTO users (chat_id) VALUES (" + std::to_string(chat_id) + ");";
         char* zErrMsg = 0;
         int rc = sqlite3_exec(db, sql_insert.c_str(), 0, 0, &zErrMsg);
 
@@ -92,9 +111,31 @@ int main() {
         }
         };
 
-        bot.getEvents().onCommand("start", [&bot, &addUserToDatabase](TgBot::Message::Ptr message) {
-        int64_t chat_id = message->chat->id;
+    auto sendDailyTipToAllUsers = [&bot, &db, &styleTips]() {
+        std::string sql = "SELECT chat_id FROM users;";
+        sqlite3_stmt* stmt;
+        if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL) == SQLITE_OK) {
+            std::string tip = styleTips[std::rand() % styleTips.size()];
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                int64_t chatId = sqlite3_column_int64(stmt, 0);
+                try {
+                    bot.getApi().sendMessage(chatId, tip);
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "Failed to send message to " << chatId << ": " << e.what() << std::endl;
+                }
+            }
+            sqlite3_finalize(stmt);
+        }
+        else {
+            std::cerr << "Failed to prepare select statement\n";
+        }
+        };
 
+    std::map<int64_t, UserData> users;
+
+    bot.getEvents().onCommand("start", [&bot, &addUserToDatabase](TgBot::Message::Ptr message) {
+        int64_t chat_id = message->chat->id;
         addUserToDatabase(chat_id);
 
         TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
@@ -115,10 +156,7 @@ int main() {
         keyboard->inlineKeyboard.push_back(row2);
 
         bot.getApi().sendMessage(chat_id, u8"👋 Привет! Я помогу тебе определить стиль.\n\nВыбери, что хочешь сделать:", false, 0, keyboard);
-            });
-
-
-    std::map<int64_t, UserData> users;
+        });
 
     bot.getEvents().onCallbackQuery([&bot, &users, &questions, &getAnswerButtons](TgBot::CallbackQuery::Ptr query) {
         int64_t chatId = query->message->chat->id;
@@ -143,7 +181,6 @@ int main() {
             users[chatId].step++;
 
             if (users[chatId].step >= questions.size()) {
-
                 char result = 'A';
                 int maxCount = 0;
                 for (auto& [key, count] : users[chatId].answers) {
@@ -152,7 +189,6 @@ int main() {
                         result = key;
                     }
                 }
-
                 std::string styleResult;
                 switch (result) {
                 case 'A': styleResult = u8"Твой стиль — Кэжуал / Уютный минимализм"; break;
@@ -180,6 +216,20 @@ int main() {
         }
         });
 
+    std::thread dailyTipThread([&sendDailyTipToAllUsers]() {
+        while (true) {
+            std::time_t t = std::time(nullptr) + 3 * 3600;
+            std::tm now;
+            gmtime_s(&now, &t);
+
+            if (now.tm_hour == 18 && now.tm_min == 59) {
+                sendDailyTipToAllUsers();
+                std::this_thread::sleep_for(std::chrono::seconds(60));
+            }
+            std::this_thread::sleep_for(std::chrono::seconds(30));
+        }
+        });
+
     try {
         printf("Bot username: %s\n", bot.getApi().getMe()->username.c_str());
         TgBot::TgLongPoll longPoll(bot);
@@ -192,7 +242,7 @@ int main() {
         printf("error: %s\n", e.what());
     }
 
+    dailyTipThread.detach();
     sqlite3_close(db);
-
     return 0;
 }
