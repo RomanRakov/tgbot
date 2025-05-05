@@ -4,24 +4,21 @@
 * text=auto
 
 ###############################################################################
-# Set default behavior for command prompt diff.
-#
-# This is need for earlier builds of msysgit that does not have it on by
-# default for csharp files.
-# Note: This is only used by command line
+# Explicitly tell GitHub (or other platform) that this project is C++
 ###############################################################################
+* linguist-language=C++
+
+###############################################################################
+# Set default behavior for command prompt diff.
+###############################################################################
+# For earlier builds of msysgit without default C# diffing support.
 #*.cs     diff=csharp
 
 ###############################################################################
-# Set the merge driver for project and solution files
-#
-# Merging from the command prompt will add diff markers to the files if there
-# are conflicts (Merging from VS is not affected by the settings below, in VS
-# the diff markers are never inserted). Diff markers may cause the following 
-# file extensions to fail to load in VS. An alternative would be to treat
-# these files as binary and thus will always conflict and require user
-# intervention with every merge. To do so, just uncomment the entries below
+# Set the merge driver for project and solution files.
 ###############################################################################
+# Treat certain project files as binary to avoid diff conflicts.
+# Uncomment if needed.
 #*.sln       merge=binary
 #*.csproj    merge=binary
 #*.vbproj    merge=binary
@@ -36,21 +33,18 @@
 #*.wwaproj   merge=binary
 
 ###############################################################################
-# behavior for image files
-#
-# image files are treated as binary by default.
+# Behavior for image files
 ###############################################################################
+# Treat image files as binary.
 #*.jpg   binary
 #*.png   binary
 #*.gif   binary
 
 ###############################################################################
-# diff behavior for common document formats
-# 
-# Convert binary document formats to text before diffing them. This feature
-# is only available from the command line. Turn it on by uncommenting the 
-# entries below.
+# Diff behavior for common document formats
 ###############################################################################
+# Convert binary document formats to text before diffing.
+# Uncomment if needed.
 #*.doc   diff=astextplain
 #*.DOC   diff=astextplain
 #*.docx  diff=astextplain
