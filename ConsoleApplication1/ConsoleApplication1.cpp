@@ -8,6 +8,7 @@
 #include <chrono>
 #include <ctime>
 #include <cstdlib>
+#include <sstream>
 
 int main() {
     TgBot::Bot bot("7819743495:AAH8poZ9bSwTQC7KGF5y3yXqfvdr5Zgy0Co");
@@ -18,7 +19,7 @@ int main() {
     }
     catch (TgBot::TgException& e) {
         std::cerr << "Failed to delete webhook: " << e.what() << std::endl;
-        return 1; 
+        return 1;
     }
 
     struct UserData {
@@ -52,8 +53,31 @@ int main() {
         u8"👖 Совет дня: Прямые джинсы подходят практически для любого типа фигуры.",
         u8"🕶 Совет дня: Очки — не только защита от солнца, но и мощный элемент стиля!",
         u8"👜 Совет дня: Стильная сумка может стать акцентом в образе.",
-        u8"💼 Совет дня: Опрятность важнее брендов. Следи за состоянием вещей!"
+        u8"💼 Совет дня: Опрятность важнее брендов. Следи за состоянием вещей!",
+        u8"⭐ Совет дня: Подбирай одежду по фигуре, чтобы подчеркнуть достоинства.",
+        u8"💡 Совет дня: Следи за сочетанием цветов в одежде.",
+        u8"🛍 Совет дня: Не бойся экспериментировать с разными стилями.",
+        u8"🧵 Совет дня: Обращай внимание на качество ткани и пошива.",
+        u8"🧦 Совет дня: Носки могут быть ярким акцентом в образе!",
+        u8"💎 Совет дня: Минималистичные украшения всегда актуальны.",
+        u8"⌚ Совет дня: Часы - это стильный и функциональный аксессуар.",
+        u8"🧣 Совет дня: Шарф может добавить тепла и стиля в холодную погоду.",
+        u8"🧤 Совет дня: Перчатки - незаменимый аксессуар для зимнего гардероба.",
+        u8"👑 Совет дня: Чувствуй себя уверенно в любой одежде!",
+        u8"✨ Совет дня: Создавай свой уникальный стиль.",
+        u8"🌿 Совет дня: Выбирай экологичные материалы.",
+        u8"👠 Совет дня: Правильно подобранная обувь - залог комфорта и стиля.",
+        u8"👒 Совет дня: Головной убор может завершить образ.",
+        u8"🌙 Совет дня: Учитывай время суток при выборе наряда.",
+        u8"🌞 Совет дня: Одежда должна соответствовать погоде.",
+        u8"🧘 Совет дня: Одежда не должна стеснять движения.",
+        u8"🎁 Совет дня: Дари себе новые вещи, чтобы поднять настроение!",
+        u8"🎭 Совет дня: Одежда может отражать твое настроение.",
+        u8"🎼 Совет дня: Одежда может вдохновлять на новые свершения.",
+        u8"💭 Совет дня: Помни, что ты прекрасен в любом образе!",
+        u8"📚 Совет дня: Читай модные журналы и блоги, чтобы быть в курсе трендов."
     };
+
 
     auto getAnswerButtons = []() -> TgBot::InlineKeyboardMarkup::Ptr {
         TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
@@ -84,7 +108,8 @@ int main() {
 
     const char* sql_create_table = "CREATE TABLE IF NOT EXISTS users ("
         "id INTEGER PRIMARY KEY, "
-        "chat_id INTEGER UNIQUE NOT NULL);";
+        "chat_id INTEGER UNIQUE NOT NULL, "
+        "daily_tips_enabled INTEGER DEFAULT 1);";
 
     char* zErrMsg = 0;
     rc = sqlite3_exec(db, sql_create_table, 0, 0, &zErrMsg);
@@ -112,7 +137,7 @@ int main() {
         };
 
     auto sendDailyTipToAllUsers = [&bot, &db, &styleTips]() {
-        std::string sql = "SELECT chat_id FROM users;";
+        std::string sql = "SELECT chat_id FROM users WHERE daily_tips_enabled = 1;";
         sqlite3_stmt* stmt;
         if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL) == SQLITE_OK) {
             std::string tip = styleTips[std::rand() % styleTips.size()];
@@ -131,6 +156,40 @@ int main() {
             std::cerr << "Failed to prepare select statement\n";
         }
         };
+
+    auto isDailyTipsEnabled = [&db](int64_t chat_id) -> bool {
+        std::string sql = "SELECT daily_tips_enabled FROM users WHERE chat_id = " + std::to_string(chat_id) + ";";
+        sqlite3_stmt* stmt;
+        bool enabled = true;
+
+        if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL) == SQLITE_OK) {
+            if (sqlite3_step(stmt) == SQLITE_ROW) {
+                enabled = sqlite3_column_int(stmt, 0) == 1;
+            }
+            sqlite3_finalize(stmt);
+        }
+        else {
+            std::cerr << "Failed to prepare select statement\n";
+        }
+        return enabled;
+        };
+
+    auto setDailyTipsEnabled = [&db](int64_t chat_id, bool enabled) {
+        std::string sql = "UPDATE users SET daily_tips_enabled = " + std::to_string(enabled ? 1 : 0) +
+            " WHERE chat_id = " + std::to_string(chat_id) + ";";
+
+        char* zErrMsg = 0;
+        int rc = sqlite3_exec(db, sql.c_str(), 0, 0, &zErrMsg);
+
+        if (rc != SQLITE_OK) {
+            std::cerr << "SQL error: " << zErrMsg << std::endl;
+            sqlite3_free(zErrMsg);
+        }
+        else {
+            std::cout << "Daily tips for chat_id " << chat_id << " set to " << enabled << std::endl;
+        }
+        };
+
 
     std::map<int64_t, UserData> users;
 
@@ -152,13 +211,22 @@ int main() {
         button2->callbackData = "start_test";
         row2.push_back(button2);
 
+        std::vector<TgBot::InlineKeyboardButton::Ptr> row3;
+        TgBot::InlineKeyboardButton::Ptr button3(new TgBot::InlineKeyboardButton);
+        button3->text = u8"⚙️ Настройки";
+        button3->callbackData = "settings";
+        row3.push_back(button3);
+
+
         keyboard->inlineKeyboard.push_back(row1);
         keyboard->inlineKeyboard.push_back(row2);
+        keyboard->inlineKeyboard.push_back(row3);
 
-        bot.getApi().sendMessage(chat_id, u8"👋 Привет! Я помогу тебе определить стиль.\n\nВыбери, что хочешь сделать:", false, 0, keyboard);
+
+        bot.getApi().sendMessage(chat_id, u8"✨ Привет! Я твой личный помощник по стилю.\n\nЧто ты хочешь сделать?", false, 0, keyboard);
         });
 
-    bot.getEvents().onCallbackQuery([&bot, &users, &questions, &getAnswerButtons](TgBot::CallbackQuery::Ptr query) {
+    bot.getEvents().onCallbackQuery([&bot, &users, &questions, &getAnswerButtons, &isDailyTipsEnabled, &setDailyTipsEnabled](TgBot::CallbackQuery::Ptr query) {
         int64_t chatId = query->message->chat->id;
         std::string data = query->data;
 
@@ -207,6 +275,46 @@ int main() {
                     false, 0, getAnswerButtons());
             }
         }
+
+        if (data == "settings") {
+            TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
+            std::vector<TgBot::InlineKeyboardButton::Ptr> row1;
+
+            TgBot::InlineKeyboardButton::Ptr dailyTipsButton(new TgBot::InlineKeyboardButton);
+            bool tipsEnabled = isDailyTipsEnabled(chatId);
+            dailyTipsButton->text = (tipsEnabled ? u8"🚫 Выключить советы по стилю" : u8"✅ Включить советы по стилю");
+            dailyTipsButton->callbackData = "toggle_daily_tips";
+            row1.push_back(dailyTipsButton);
+
+            keyboard->inlineKeyboard.push_back(row1);
+            bot.getApi().sendMessage(chatId, u8"⚙️ Настройки:\n\nЗдесь ты можешь настроить параметры бота.", false, 0, keyboard);
+
+        }
+
+        if (data == "toggle_daily_tips") {
+            bool currentSetting = isDailyTipsEnabled(chatId);
+            bool newSetting = !currentSetting;
+
+            if (currentSetting != newSetting) {
+                setDailyTipsEnabled(chatId, newSetting);
+
+                TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
+                std::vector<TgBot::InlineKeyboardButton::Ptr> row1;
+
+                TgBot::InlineKeyboardButton::Ptr dailyTipsButton(new TgBot::InlineKeyboardButton);
+                dailyTipsButton->text = (newSetting ? u8"🚫 Выключить советы по стилю" : u8"✅ Включить советы по стилю");
+                dailyTipsButton->callbackData = "toggle_daily_tips";
+                row1.push_back(dailyTipsButton);
+
+                keyboard->inlineKeyboard.push_back(row1);
+
+                bot.getApi().editMessageText(u8"⚙️ Настройки:\n\nЗдесь ты можешь настроить параметры бота.", chatId, query->message->messageId, "", "Markdown", false, keyboard);
+            }
+            else {
+                bot.getApi().answerCallbackQuery(query->id, u8"Состояние уже установлено.", true);
+            }
+        }
+
         bot.getApi().answerCallbackQuery(query->id);
         });
 
@@ -222,7 +330,7 @@ int main() {
             std::tm now;
             gmtime_s(&now, &t);
 
-            if (now.tm_hour == 18 && now.tm_min == 59) {
+            if (now.tm_hour == 20 && now.tm_min == 43) {
                 sendDailyTipToAllUsers();
                 std::this_thread::sleep_for(std::chrono::seconds(60));
             }
