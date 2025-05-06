@@ -9,6 +9,8 @@
 #include <ctime>
 #include <cstdlib>
 #include <sstream>
+#include <algorithm>
+#include <iomanip>
 
 int main() {
     TgBot::Bot bot("7819743495:AAH8poZ9bSwTQC7KGF5y3yXqfvdr5Zgy0Co");
@@ -25,6 +27,7 @@ int main() {
     struct UserData {
         int step = 0;
         std::map<char, int> answers;
+        int lastQuestionMessageId = 0;
     };
 
     struct Question {
@@ -33,53 +36,43 @@ int main() {
     };
 
     std::vector<Question> questions = {
-        {u8"1. Что ты наденешь на встречу с друзьями?", {u8"A. Джинсы и футболка", u8"B. Модное по тренду", u8"C. Классика", u8"D. Что-то яркое"}},
-        {u8"2. Какой интерьер тебе ближе?", {u8"A. Уютный и минималистичный", u8"B. Современный", u8"C. Стильный и строгий", u8"D. Яркий, необычный"}},
-        {u8"3. Как ты ведёшь себя в компании?", {u8"A. Спокойно", u8"B. Общаюсь, но сдержанно", u8"C. Поддерживаю, советую", u8"D. Весёлый и импровизирую"}},
-        {u8"4. Что тебе ближе по духу?", {u8"A. Простота и комфорт", u8"B. Элегантность и тренды", u8"C. Статус и утончённость", u8"D. Творчество и оригинальность"}},
-        {u8"5. Какой аксессуар выберешь?", {u8"A. Рюкзак", u8"B. Модная сумка", u8"C. Часы", u8"D. Яркие очки"}},
-        {u8"6. Какой транспорт тебе ближе?", {u8"A. Велосипед", u8"B. Электросамокат", u8"C. Автомобиль бизнес-класса", u8"D. Мотоцикл или скейт"}},
-        {u8"7. Что ты обычно заказываешь в кафе?", {u8"A. Кофе и круассан", u8"B. Авокадо-тост", u8"C. Классический стейк", u8"D. Что-то экзотическое"}},
-        {u8"8. Как ты проводишь свободное время?", {u8"A. Дома с книгой или сериалом", u8"B. Прогуливаюсь по городу", u8"C. Посещаю выставки, театры", u8"D. Пробую новые хобби"}},
-        {u8"9. Какую обувь выберешь?", {u8"A. Кеды", u8"B. Кроссовки по тренду", u8"C. Кожаные туфли", u8"D. Яркие ботинки или необычные сникеры"}},
-        {u8"10. Как ты выбираешь одежду?", {u8"A. Главное — удобно", u8"B. То, что в моде", u8"C. Проверенные классические вещи", u8"D. Что-то необычное и интересное"}}
+        {u8"1. Какие цвета преобладают в вашей одежде?", {u8"A. Черный, белый, серый, бежевый, синий", u8"B. Удобные, любые цвета", u8"C. Пастельные и светлые", u8"D. Яркие, контрастные"}},
+        {u8"2. Что для вас важнее всего при выборе одежды?", {u8"A. Элегантность и соответствие случаю", u8"B. Комфорт и свобода движений", u8"C. Нежность и легкость", u8"D. Привлечение внимания и выражение индивидуальности"}},
+        {u8"3. Какую обувь вы выберете для повседневной носки?", {u8"A. Классические туфли или ботинки", u8"B. Кроссовки или кеды", u8"C. Балетки или сандалии", u8"D. Необычную обувь с ярким дизайном"}},
+        {u8"4. Какие ткани вы предпочитаете?", {u8"A. Плотные, хорошо держащие форму", u8"B. Мягкие, удобные, спортивные", u8"C. Легкие, воздушные", u8"D. Необычные, текстурные"}},
+        {u8"5. Какие аксессуары вы считаете важными?", {u8"A. Минималистичные, качественные", u8"B. Удобные, функциональные", u8"C. Нежные, изящные", u8"D. Эффектные, привлекающие внимание"}},
+        {u8"6. Какой крой одежды вам ближе?", {u8"A. Прямой, строгий", u8"B. Свободный, спортивный", u8"C. Плавный, приталенный", u8"D. Необычный, асимметричный"}},
+        {u8"7. Какую верхнюю одежду вы обычно выбираете?", {u8"A. Классическое пальто или тренч", u8"B. Куртку-бомбер или спортивную парку", u8"C. Легкий плащ или кардиган", u8"D. Яркое, необычное пальто или куртку"}},
+        {u8"8. Как вы относитесь к деталям в одежде?", {u8"A. Минимум деталей", u8"B. Функциональные детали", u8"C. Декоративные детали (рюши, кружево)", u8"D. Необычные, привлекающие внимание детали"}},
+        {u8"9. Какую одежду вы выберете для вечеринки?", {u8"A. Элегантное платье или костюм", u8"B. Спортивный костюм или удобный наряд", u8"C. Легкое платье или блузку с юбкой", u8"D. Яркий, экстравагантный наряд"}},
+        {u8"10. Что для вас самое важное в стиле?", {u8"A. Вневременная элегантность", u8"B. Комфорт и функциональность", u8"C. Нежность и романтика", u8"D. Выражение индивидуальности и креативности"}}
     };
 
-    std::vector<std::string> styleTips = {
-        u8"👔 Совет дня: Нейтральные цвета легко комбинировать между собой!",
-        u8"👟 Совет дня: Всегда имей пару базовых белых кроссовок — это мастхэв.",
-        u8"🎨 Совет дня: Аксессуары могут оживить даже самый простой образ.",
-        u8"🧥 Совет дня: Инвестируй в качественную базовую верхнюю одежду.",
-        u8"👖 Совет дня: Прямые джинсы подходят практически для любого типа фигуры.",
-        u8"🕶 Совет дня: Очки — не только защита от солнца, но и мощный элемент стиля!",
-        u8"👜 Совет дня: Стильная сумка может стать акцентом в образе.",
-        u8"💼 Совет дня: Опрятность важнее брендов. Следи за состоянием вещей!",
-        u8"⭐ Совет дня: Подбирай одежду по фигуре, чтобы подчеркнуть достоинства.",
-        u8"💡 Совет дня: Следи за сочетанием цветов в одежде.",
-        u8"🛍 Совет дня: Не бойся экспериментировать с разными стилями.",
-        u8"🧵 Совет дня: Обращай внимание на качество ткани и пошива.",
-        u8"🧦 Совет дня: Носки могут быть ярким акцентом в образе!",
-        u8"💎 Совет дня: Минималистичные украшения всегда актуальны.",
-        u8"⌚ Совет дня: Часы - это стильный и функциональный аксессуар.",
-        u8"🧣 Совет дня: Шарф может добавить тепла и стиля в холодную погоду.",
-        u8"🧤 Совет дня: Перчатки - незаменимый аксессуар для зимнего гардероба.",
-        u8"👑 Совет дня: Чувствуй себя уверенно в любой одежде!",
-        u8"✨ Совет дня: Создавай свой уникальный стиль.",
-        u8"🌿 Совет дня: Выбирай экологичные материалы.",
-        u8"👠 Совет дня: Правильно подобранная обувь - залог комфорта и стиля.",
-        u8"👒 Совет дня: Головной убор может завершить образ.",
-        u8"🌙 Совет дня: Учитывай время суток при выборе наряда.",
-        u8"🌞 Совет дня: Одежда должна соответствовать погоде.",
-        u8"🧘 Совет дня: Одежда не должна стеснять движения.",
-        u8"🎁 Совет дня: Дари себе новые вещи, чтобы поднять настроение!",
-        u8"🎭 Совет дня: Одежда может отражать твое настроение.",
-        u8"🎼 Совет дня: Одежда может вдохновлять на новые свершения.",
-        u8"💭 Совет дня: Помни, что ты прекрасен в любом образе!",
-        u8"📚 Совет дня: Читай модные журналы и блоги, чтобы быть в курсе трендов."
+    std::vector<std::string> classicStyleTips = {
+        u8"👔 Совет дня: Носите однотонные рубашки с костюмом для строгого образа.",
+        u8"💼 Совет дня: Инвестируйте в качественный кожаный портфель.",
+        u8"⌚ Совет дня: Выбирайте классические часы с кожаным ремешком."
     };
 
+    std::vector<std::string> sportStyleTips = {
+        u8"👟 Совет дня: Сочетайте спортивные штаны с футболкой оверсайз для удобного образа.",
+        u8"🧢 Совет дня: Носите бейсболку для защиты от солнца и стильного вида.",
+        u8"🎒 Совет дня: Выбирайте рюкзак с удобными лямками для активного образа жизни."
+    };
 
-    auto getAnswerButtons = []() -> TgBot::InlineKeyboardMarkup::Ptr {
+    std::vector<std::string> romanticStyleTips = {
+        u8"🌸 Совет дня: Носите платья с цветочным принтом для романтичного образа.",
+        u8"🎀 Совет дня: Дополните образ бантом в волосах или на одежде.",
+        u8"👡 Совет дня: Выбирайте балетки или сандалии на плоской подошве."
+    };
+
+    std::vector<std::string> dramaticStyleTips = {
+        u8"🎭 Совет дня: Носите одежду с необычными вырезами и асимметрией.",
+        u8"💄 Совет дня: Подчеркните губы яркой помадой для эффектного образа.",
+        u8"💍 Совет дня: Выбирайте крупные, броские украшения."
+    };
+
+    auto getAnswerButtons = [](bool allowBack) -> TgBot::InlineKeyboardMarkup::Ptr {
         TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
         std::vector<TgBot::InlineKeyboardButton::Ptr> row1, row2;
 
@@ -91,6 +84,14 @@ int main() {
             else row2.push_back(btn);
         }
         keyboard->inlineKeyboard.push_back(row1);
+        if (allowBack) {
+            std::vector<TgBot::InlineKeyboardButton::Ptr> row3;
+            TgBot::InlineKeyboardButton::Ptr backBtn(new TgBot::InlineKeyboardButton);
+            backBtn->text = u8"⬅️ Назад";
+            backBtn->callbackData = "back";
+            row3.push_back(backBtn);
+            keyboard->inlineKeyboard.push_back(row3);
+        }
         keyboard->inlineKeyboard.push_back(row2);
         return keyboard;
         };
@@ -109,7 +110,8 @@ int main() {
     const char* sql_create_table = "CREATE TABLE IF NOT EXISTS users ("
         "id INTEGER PRIMARY KEY, "
         "chat_id INTEGER UNIQUE NOT NULL, "
-        "daily_tips_enabled INTEGER DEFAULT 1);";
+        "daily_tips_enabled INTEGER DEFAULT 1, "
+        "style CHAR(1));";
 
     char* zErrMsg = 0;
     rc = sqlite3_exec(db, sql_create_table, 0, 0, &zErrMsg);
@@ -136,18 +138,59 @@ int main() {
         }
         };
 
-    auto sendDailyTipToAllUsers = [&bot, &db, &styleTips]() {
-        std::string sql = "SELECT chat_id FROM users WHERE daily_tips_enabled = 1;";
+
+    auto setUserStyle = [&db](int64_t chat_id, char style) {
+        std::string sql_update = "UPDATE users SET style = '" + std::string(1, style) +
+            "' WHERE chat_id = " + std::to_string(chat_id) + ";";
+        char* zErrMsg = 0;
+        int rc = sqlite3_exec(db, sql_update.c_str(), 0, 0, &zErrMsg);
+
+        if (rc != SQLITE_OK) {
+            std::cerr << "SQL error: " << zErrMsg << std::endl;
+            sqlite3_free(zErrMsg);
+        }
+        else {
+            std::cout << "Style for chat_id " << chat_id << " set to " << style << std::endl;
+        }
+        };
+
+    auto getStyleTips = [&](char style) -> std::vector<std::string>&{
+        switch (style) {
+        case 'A': return classicStyleTips;
+        case 'B': return sportStyleTips;
+        case 'C': return romanticStyleTips;
+        case 'D': return dramaticStyleTips;
+        default: return classicStyleTips;
+        }
+        };
+
+    auto sendDailyTipToAllUsers = [&bot, &db, &classicStyleTips, &sportStyleTips, &romanticStyleTips, &dramaticStyleTips, &getStyleTips]() {
+        std::string sql = "SELECT chat_id, style FROM users WHERE daily_tips_enabled = 1 AND style IS NOT NULL;";
         sqlite3_stmt* stmt;
         if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL) == SQLITE_OK) {
-            std::string tip = styleTips[std::rand() % styleTips.size()];
             while (sqlite3_step(stmt) == SQLITE_ROW) {
                 int64_t chatId = sqlite3_column_int64(stmt, 0);
-                try {
-                    bot.getApi().sendMessage(chatId, tip);
+                const char* styleChar = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+
+                if (styleChar != nullptr && strlen(styleChar) == 1) {
+                    char style = styleChar[0];
+
+                    std::vector<std::string>& styleTips = getStyleTips(style);
+                    if (!styleTips.empty()) {
+                        std::string tip = styleTips[std::rand() % styleTips.size()];
+                        try {
+                            bot.getApi().sendMessage(chatId, tip);
+                        }
+                        catch (const std::exception& e) {
+                            std::cerr << "Failed to send message to " << chatId << ": " << e.what() << std::endl;
+                        }
+                    }
+                    else {
+                        std::cerr << "No tips found for style: " << style << std::endl;
+                    }
                 }
-                catch (const std::exception& e) {
-                    std::cerr << "Failed to send message to " << chatId << ": " << e.what() << std::endl;
+                else {
+                    std::cerr << "Invalid or missing style for chat_id: " << chatId << std::endl;
                 }
             }
             sqlite3_finalize(stmt);
@@ -156,6 +199,7 @@ int main() {
             std::cerr << "Failed to prepare select statement\n";
         }
         };
+
 
     auto isDailyTipsEnabled = [&db](int64_t chat_id) -> bool {
         std::string sql = "SELECT daily_tips_enabled FROM users WHERE chat_id = " + std::to_string(chat_id) + ";";
@@ -192,6 +236,7 @@ int main() {
 
 
     std::map<int64_t, UserData> users;
+    std::map<int64_t, int> previousQuestionMessageIds;
 
     bot.getEvents().onCommand("start", [&bot, &addUserToDatabase](TgBot::Message::Ptr message) {
         int64_t chat_id = message->chat->id;
@@ -226,8 +271,9 @@ int main() {
         bot.getApi().sendMessage(chat_id, u8"✨ Привет! Я твой личный помощник по стилю.\n\nЧто ты хочешь сделать?", false, 0, keyboard);
         });
 
-    bot.getEvents().onCallbackQuery([&bot, &users, &questions, &getAnswerButtons, &isDailyTipsEnabled, &setDailyTipsEnabled](TgBot::CallbackQuery::Ptr query) {
+    bot.getEvents().onCallbackQuery([&bot, &users, &questions, &getAnswerButtons, &isDailyTipsEnabled, &setDailyTipsEnabled, &setUserStyle, &previousQuestionMessageIds](TgBot::CallbackQuery::Ptr query) {
         int64_t chatId = query->message->chat->id;
+        int messageId = query->message->messageId;
         std::string data = query->data;
 
         if (data == "search_product") {
@@ -238,41 +284,112 @@ int main() {
             users[chatId] = UserData();
             bot.getApi().sendMessage(chatId, u8"🎯 Начинаем тест! Отвечай на вопросы, нажимая кнопки.");
             const auto& q = questions[0];
-            bot.getApi().sendMessage(chatId, q.text + u8"\n\n" +
+            TgBot::Message::Ptr sentMessage = bot.getApi().sendMessage(chatId, q.text + u8"\n\n" +
                 q.options[0] + "\n" + q.options[1] + "\n" + q.options[2] + "\n" + q.options[3],
-                false, 0, getAnswerButtons());
+                false, 0, getAnswerButtons(false));
+            users[chatId].lastQuestionMessageId = sentMessage->messageId;
+            previousQuestionMessageIds[chatId] = sentMessage->messageId;
+        }
+
+        if (data == "back") {
+            if (users.find(chatId) != users.end() && users[chatId].step > 0) {
+                users[chatId].step--;
+                const auto& q = questions[users[chatId].step];
+
+                try {
+                    bot.getApi().deleteMessage(chatId, previousQuestionMessageIds[chatId]);
+                }
+                catch (TgBot::TgException& e) {
+                    std::cerr << "Failed to delete message: " << e.what() << std::endl;
+                }
+
+                TgBot::Message::Ptr sentMessage = bot.getApi().sendMessage(chatId, q.text + u8"\n\n" +
+                    q.options[0] + "\n" + q.options[1] + "\n" + q.options[2] + "\n" + q.options[3],
+                    false, 0, getAnswerButtons(users[chatId].step > 0));
+                users[chatId].lastQuestionMessageId = sentMessage->messageId;
+                previousQuestionMessageIds[chatId] = sentMessage->messageId;
+            }
+            else {
+                bot.getApi().answerCallbackQuery(query->id, u8"Некуда возвращаться.", true);
+            }
         }
 
         if (data.rfind("answer_", 0) == 0) {
-            char answer = data[7];
-            users[chatId].answers[answer]++;
-            users[chatId].step++;
+            if (users.find(chatId) != users.end() && users[chatId].lastQuestionMessageId == messageId) {
+                char answer = data[7];
+                users[chatId].answers[answer]++;
+                users[chatId].step++;
+                users[chatId].lastQuestionMessageId = 0;
 
-            if (users[chatId].step >= questions.size()) {
-                char result = 'A';
-                int maxCount = 0;
-                for (auto& [key, count] : users[chatId].answers) {
-                    if (count > maxCount) {
-                        maxCount = count;
-                        result = key;
+                try {
+                    bot.getApi().deleteMessage(chatId, previousQuestionMessageIds[chatId]);
+                }
+                catch (TgBot::TgException& e) {
+                    std::cerr << "Failed to delete message: " << e.what() << std::endl;
+                }
+
+                if (users[chatId].step >= questions.size()) {
+                    char result = 'A';
+                    int maxCount = 0;
+                    for (auto& [key, count] : users[chatId].answers) {
+                        if (count > maxCount) {
+                            maxCount = count;
+                            result = key;
+                        }
                     }
-                }
-                std::string styleResult;
-                switch (result) {
-                case 'A': styleResult = u8"Твой стиль — Кэжуал / Уютный минимализм"; break;
-                case 'B': styleResult = u8"Твой стиль — Модный / Современный"; break;
-                case 'C': styleResult = u8"Твой стиль — Классический / Элегантный"; break;
-                case 'D': styleResult = u8"Твой стиль — Творческий / Экстравагантный"; break;
-                }
 
-                bot.getApi().sendMessage(chatId, u8"✅ Готово!\n\n" + styleResult);
-                users.erase(chatId);
+                    std::string styleResult;
+                    std::string styleDescription;
+                    switch (result) {
+                    case 'A':
+                        styleResult = u8"Классический стиль";
+                        styleDescription = u8"Строгие линии, сдержанные цвета (чёрный, белый, серый, бежевый, синий), минимализм в деталях. Костюмы, рубашки, пальто прямого кроя — всё выглядит элегантно и вне времени.";
+                        break;
+                    case 'B':
+                        styleResult = u8"Спортивный стиль";
+                        styleDescription = u8"Удобная, функциональная одежда: худи, кроссовки, спортивные костюмы, футболки. Всё про комфорт и свободу движения. Сейчас часто сочетается с элементами уличной моды.";
+                        break;
+                    case 'C':
+                        styleResult = u8"Романтический стиль";
+                        styleDescription = u8"Лёгкие, нежные ткани (шифон, кружево), пастельные тона, цветочные принты, плавные линии. Часто включает платья, блузы с рюшами, юбки.";
+                        break;
+                    case 'D':
+                        styleResult = u8"Драматический стиль";
+                        styleDescription = u8"Яркие цвета, сложные формы, привлекающие внимание детали. Чёткие контрасты, нестандартные решения, дизайнерские вещи, акцент на эффектность образа.";
+                        break;
+                    }
+
+                    int totalAnswers = questions.size();
+                    std::map<char, double> stylePercentages;
+                    stylePercentages['A'] = (double)users[chatId].answers['A'] / totalAnswers * 100.0;
+                    stylePercentages['B'] = (double)users[chatId].answers['B'] / totalAnswers * 100.0;
+                    stylePercentages['C'] = (double)users[chatId].answers['C'] / totalAnswers * 100.0;
+                    stylePercentages['D'] = (double)users[chatId].answers['D'] / totalAnswers * 100.0;
+
+                    std::stringstream ss;
+                    ss << u8"✅ Готово!\n\n" << styleResult << u8"\n\n" << styleDescription << "\n\n";
+                    ss << u8"📊 Распределение по стилям:\n";
+                    ss << u8"Классический (A): " << std::fixed << std::setprecision(1) << stylePercentages['A'] << "%\n";
+                    ss << u8"Спортивный (B): " << std::fixed << std::setprecision(1) << stylePercentages['B'] << "%\n";
+                    ss << u8"Романтический (C): " << std::fixed << std::setprecision(1) << stylePercentages['C'] << "%\n";
+                    ss << u8"Драматический (D): " << std::fixed << std::setprecision(1) << stylePercentages['D'] << "%\n";
+
+                    bot.getApi().sendMessage(chatId, ss.str());
+                    setUserStyle(chatId, result);
+                    users.erase(chatId);
+                    previousQuestionMessageIds.erase(chatId);
+                }
+                else {
+                    const auto& q = questions[users[chatId].step];
+                    TgBot::Message::Ptr sentMessage = bot.getApi().sendMessage(chatId, q.text + u8"\n\n" +
+                        q.options[0] + "\n" + q.options[1] + "\n" + q.options[2] + "\n" + q.options[3],
+                        false, 0, getAnswerButtons(users[chatId].step > 0));
+                    users[chatId].lastQuestionMessageId = sentMessage->messageId;
+                    previousQuestionMessageIds[chatId] = sentMessage->messageId;
+                }
             }
             else {
-                const auto& q = questions[users[chatId].step];
-                bot.getApi().sendMessage(chatId, q.text + u8"\n\n" +
-                    q.options[0] + "\n" + q.options[1] + "\n" + q.options[2] + "\n" + q.options[3],
-                    false, 0, getAnswerButtons());
+                bot.getApi().answerCallbackQuery(query->id, u8"Пожалуйста, ответьте на последний заданный вопрос.", true);
             }
         }
 
@@ -324,14 +441,46 @@ int main() {
         }
         });
 
-    std::thread dailyTipThread([&sendDailyTipToAllUsers]() {
+    std::thread dailyTipThread([&bot, &db, &classicStyleTips, &sportStyleTips, &romanticStyleTips, &dramaticStyleTips, &getStyleTips]() {
         while (true) {
             std::time_t t = std::time(nullptr) + 3 * 3600;
             std::tm now;
             gmtime_s(&now, &t);
 
-            if (now.tm_hour == 20 && now.tm_min == 43) {
-                sendDailyTipToAllUsers();
+            if (now.tm_hour == 20 && now.tm_min == 17) {
+                std::string sql = "SELECT chat_id, style FROM users WHERE daily_tips_enabled = 1 AND style IS NOT NULL;";
+                sqlite3_stmt* stmt;
+                if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL) == SQLITE_OK) {
+                    while (sqlite3_step(stmt) == SQLITE_ROW) {
+                        int64_t chatId = sqlite3_column_int64(stmt, 0);
+                        const char* styleChar = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+
+                        if (styleChar != nullptr && strlen(styleChar) == 1) {
+                            char style = styleChar[0];
+
+                            std::vector<std::string>& styleTips = getStyleTips(style);
+                            if (!styleTips.empty()) {
+                                std::string tip = styleTips[std::rand() % styleTips.size()];
+                                try {
+                                    bot.getApi().sendMessage(chatId, tip);
+                                }
+                                catch (const std::exception& e) {
+                                    std::cerr << "Failed to send message to " << chatId << ": " << e.what() << std::endl;
+                                }
+                            }
+                            else {
+                                std::cerr << "No tips found for style: " << style << std::endl;
+                            }
+                        }
+                        else {
+                            std::cerr << "Invalid or missing style for chat_id: " << chatId << std::endl;
+                        }
+                    }
+                    sqlite3_finalize(stmt);
+                }
+                else {
+                    std::cerr << "Failed to prepare select statement\n";
+                }
                 std::this_thread::sleep_for(std::chrono::seconds(60));
             }
             std::this_thread::sleep_for(std::chrono::seconds(30));
