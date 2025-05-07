@@ -72,7 +72,37 @@ int main() {
         u8"💍 Совет дня: Выбирайте крупные, броские украшения."
     };
 
-    auto getAnswerButtons = [](bool allowBack) -> TgBot::InlineKeyboardMarkup::Ptr {
+    auto getMainMenuKeyboard = []() -> TgBot::InlineKeyboardMarkup::Ptr {
+        TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
+
+        std::vector<TgBot::InlineKeyboardButton::Ptr> row1;
+        TgBot::InlineKeyboardButton::Ptr button1(new TgBot::InlineKeyboardButton);
+        button1->text = u8"🔍 Поиск товара по артикулу";
+        button1->callbackData = "search_product";
+        row1.push_back(button1);
+
+        std::vector<TgBot::InlineKeyboardButton::Ptr> row2;
+        TgBot::InlineKeyboardButton::Ptr button2(new TgBot::InlineKeyboardButton);
+        button2->text = u8"🎨 Тест на определение твоего стиля";
+        button2->callbackData = "start_test";
+        row2.push_back(button2);
+
+        std::vector<TgBot::InlineKeyboardButton::Ptr> row3;
+        TgBot::InlineKeyboardButton::Ptr button3(new TgBot::InlineKeyboardButton);
+        button3->text = u8"⚙️ Настройки";
+        button3->callbackData = "settings";
+        row3.push_back(button3);
+
+
+        keyboard->inlineKeyboard.push_back(row1);
+        keyboard->inlineKeyboard.push_back(row2);
+        keyboard->inlineKeyboard.push_back(row3);
+
+        return keyboard;
+        };
+
+
+    auto getAnswerButtons = [&getMainMenuKeyboard](bool allowBack) -> TgBot::InlineKeyboardMarkup::Ptr {
         TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
         std::vector<TgBot::InlineKeyboardButton::Ptr> row1, row2;
 
@@ -83,16 +113,41 @@ int main() {
             if (ch == 'A' || ch == 'B') row1.push_back(btn);
             else row2.push_back(btn);
         }
-        keyboard->inlineKeyboard.push_back(row1);
+
+        if (!row1.empty()) {
+            keyboard->inlineKeyboard.push_back(row1);
+        }
+        if (!row2.empty()) {
+            keyboard->inlineKeyboard.push_back(row2);
+        }
+
+
+        std::vector<TgBot::InlineKeyboardButton::Ptr> rowBack;
         if (allowBack) {
-            std::vector<TgBot::InlineKeyboardButton::Ptr> row3;
             TgBot::InlineKeyboardButton::Ptr backBtn(new TgBot::InlineKeyboardButton);
             backBtn->text = u8"⬅️ Назад";
             backBtn->callbackData = "back";
-            row3.push_back(backBtn);
-            keyboard->inlineKeyboard.push_back(row3);
+            rowBack.push_back(backBtn);
+            if (!rowBack.empty()) {
+                keyboard->inlineKeyboard.push_back(rowBack);
+            }
+
+
         }
-        keyboard->inlineKeyboard.push_back(row2);
+
+
+        std::vector<TgBot::InlineKeyboardButton::Ptr> rowMenu;
+        TgBot::InlineKeyboardButton::Ptr menuBtn(new TgBot::InlineKeyboardButton);
+        menuBtn->text = u8"🏠 Главное меню";
+        menuBtn->callbackData = "main_menu";
+        rowMenu.push_back(menuBtn);
+        if (!rowMenu.empty()) {
+            keyboard->inlineKeyboard.push_back(rowMenu);
+        }
+
+
+
+
         return keyboard;
         };
 
@@ -164,41 +219,6 @@ int main() {
         }
         };
 
-    auto sendDailyTipToAllUsers = [&bot, &db, &classicStyleTips, &sportStyleTips, &romanticStyleTips, &dramaticStyleTips, &getStyleTips]() {
-        std::string sql = "SELECT chat_id, style FROM users WHERE daily_tips_enabled = 1 AND style IS NOT NULL;";
-        sqlite3_stmt* stmt;
-        if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL) == SQLITE_OK) {
-            while (sqlite3_step(stmt) == SQLITE_ROW) {
-                int64_t chatId = sqlite3_column_int64(stmt, 0);
-                const char* styleChar = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-
-                if (styleChar != nullptr && strlen(styleChar) == 1) {
-                    char style = styleChar[0];
-
-                    std::vector<std::string>& styleTips = getStyleTips(style);
-                    if (!styleTips.empty()) {
-                        std::string tip = styleTips[std::rand() % styleTips.size()];
-                        try {
-                            bot.getApi().sendMessage(chatId, tip);
-                        }
-                        catch (const std::exception& e) {
-                            std::cerr << "Failed to send message to " << chatId << ": " << e.what() << std::endl;
-                        }
-                    }
-                    else {
-                        std::cerr << "No tips found for style: " << style << std::endl;
-                    }
-                }
-                else {
-                    std::cerr << "Invalid or missing style for chat_id: " << chatId << std::endl;
-                }
-            }
-            sqlite3_finalize(stmt);
-        }
-        else {
-            std::cerr << "Failed to prepare select statement\n";
-        }
-        };
 
 
     auto isDailyTipsEnabled = [&db](int64_t chat_id) -> bool {
@@ -238,43 +258,26 @@ int main() {
     std::map<int64_t, UserData> users;
     std::map<int64_t, int> previousQuestionMessageIds;
 
-    bot.getEvents().onCommand("start", [&bot, &addUserToDatabase](TgBot::Message::Ptr message) {
+    bot.getEvents().onCommand("start", [&bot, &addUserToDatabase, &getMainMenuKeyboard](TgBot::Message::Ptr message) {
         int64_t chat_id = message->chat->id;
         addUserToDatabase(chat_id);
 
-        TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
-
-        std::vector<TgBot::InlineKeyboardButton::Ptr> row1;
-        TgBot::InlineKeyboardButton::Ptr button1(new TgBot::InlineKeyboardButton);
-        button1->text = u8"🔍 Поиск товара по артикулу";
-        button1->callbackData = "search_product";
-        row1.push_back(button1);
-
-        std::vector<TgBot::InlineKeyboardButton::Ptr> row2;
-        TgBot::InlineKeyboardButton::Ptr button2(new TgBot::InlineKeyboardButton);
-        button2->text = u8"🎨 Тест на определение твоего стиля";
-        button2->callbackData = "start_test";
-        row2.push_back(button2);
-
-        std::vector<TgBot::InlineKeyboardButton::Ptr> row3;
-        TgBot::InlineKeyboardButton::Ptr button3(new TgBot::InlineKeyboardButton);
-        button3->text = u8"⚙️ Настройки";
-        button3->callbackData = "settings";
-        row3.push_back(button3);
-
-
-        keyboard->inlineKeyboard.push_back(row1);
-        keyboard->inlineKeyboard.push_back(row2);
-        keyboard->inlineKeyboard.push_back(row3);
-
-
-        bot.getApi().sendMessage(chat_id, u8"✨ Привет! Я твой личный помощник по стилю.\n\nЧто ты хочешь сделать?", false, 0, keyboard);
+        bot.getApi().sendMessage(chat_id, u8"✨ Привет! Я твой личный помощник по стилю.\n\nЧто ты хочешь сделать?", false, 0, getMainMenuKeyboard());
         });
 
-    bot.getEvents().onCallbackQuery([&bot, &users, &questions, &getAnswerButtons, &isDailyTipsEnabled, &setDailyTipsEnabled, &setUserStyle, &previousQuestionMessageIds](TgBot::CallbackQuery::Ptr query) {
+    bot.getEvents().onCallbackQuery([&bot, &users, &questions, &getAnswerButtons, &isDailyTipsEnabled, &setDailyTipsEnabled, &setUserStyle, &previousQuestionMessageIds, &getMainMenuKeyboard](TgBot::CallbackQuery::Ptr query) {
         int64_t chatId = query->message->chat->id;
         int messageId = query->message->messageId;
         std::string data = query->data;
+
+        if (data == "main_menu") {
+            bot.getApi().editMessageText(u8"✨ Привет! Я твой личный помощник по стилю.\n\nЧто ты хочешь сделать?", chatId, messageId, "", "Markdown", false, getMainMenuKeyboard());
+            if (users.count(chatId)) {
+                users.erase(chatId);  // Clear quiz data if returning to main menu during a quiz.
+            }
+
+            return;
+        }
 
         if (data == "search_product") {
             bot.getApi().sendMessage(chatId, u8"🔧 Эта функция пока в разработке.");
@@ -374,7 +377,7 @@ int main() {
                     ss << u8"Романтический (C): " << std::fixed << std::setprecision(1) << stylePercentages['C'] << "%\n";
                     ss << u8"Драматический (D): " << std::fixed << std::setprecision(1) << stylePercentages['D'] << "%\n";
 
-                    bot.getApi().sendMessage(chatId, ss.str());
+                    bot.getApi().sendMessage(chatId, ss.str(), false, 0, getMainMenuKeyboard());
                     setUserStyle(chatId, result);
                     users.erase(chatId);
                     previousQuestionMessageIds.erase(chatId);
@@ -395,6 +398,16 @@ int main() {
 
         if (data == "settings") {
             TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
+
+
+            std::vector<TgBot::InlineKeyboardButton::Ptr> rowMenu;
+            TgBot::InlineKeyboardButton::Ptr menuBtn(new TgBot::InlineKeyboardButton);
+            menuBtn->text = u8"🏠 Главное меню";
+            menuBtn->callbackData = "main_menu";
+            rowMenu.push_back(menuBtn);
+
+
+
             std::vector<TgBot::InlineKeyboardButton::Ptr> row1;
 
             TgBot::InlineKeyboardButton::Ptr dailyTipsButton(new TgBot::InlineKeyboardButton);
@@ -403,8 +416,13 @@ int main() {
             dailyTipsButton->callbackData = "toggle_daily_tips";
             row1.push_back(dailyTipsButton);
 
+
+
+
             keyboard->inlineKeyboard.push_back(row1);
-            bot.getApi().sendMessage(chatId, u8"⚙️ Настройки:\n\nЗдесь ты можешь настроить параметры бота.", false, 0, keyboard);
+            keyboard->inlineKeyboard.push_back(rowMenu);
+
+            bot.getApi().editMessageText(u8"⚙️ Настройки:\n\nЗдесь ты можешь настроить параметры бота.", chatId, messageId, "", "Markdown", false, keyboard);
 
         }
 
@@ -416,6 +434,13 @@ int main() {
                 setDailyTipsEnabled(chatId, newSetting);
 
                 TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
+
+                std::vector<TgBot::InlineKeyboardButton::Ptr> rowMenu;
+                TgBot::InlineKeyboardButton::Ptr menuBtn(new TgBot::InlineKeyboardButton);
+                menuBtn->text = u8"🏠 Главное меню";
+                menuBtn->callbackData = "main_menu";
+                rowMenu.push_back(menuBtn);
+
                 std::vector<TgBot::InlineKeyboardButton::Ptr> row1;
 
                 TgBot::InlineKeyboardButton::Ptr dailyTipsButton(new TgBot::InlineKeyboardButton);
@@ -423,7 +448,10 @@ int main() {
                 dailyTipsButton->callbackData = "toggle_daily_tips";
                 row1.push_back(dailyTipsButton);
 
+
+
                 keyboard->inlineKeyboard.push_back(row1);
+                keyboard->inlineKeyboard.push_back(rowMenu);
 
                 bot.getApi().editMessageText(u8"⚙️ Настройки:\n\nЗдесь ты можешь настроить параметры бота.", chatId, query->message->messageId, "", "Markdown", false, keyboard);
             }
@@ -435,9 +463,9 @@ int main() {
         bot.getApi().answerCallbackQuery(query->id);
         });
 
-    bot.getEvents().onAnyMessage([&bot](TgBot::Message::Ptr message) {
+    bot.getEvents().onAnyMessage([&bot, &getMainMenuKeyboard](TgBot::Message::Ptr message) {
         if (!StringTools::startsWith(message->text, "/")) {
-            bot.getApi().sendMessage(message->chat->id, u8"Нажми /start, чтобы начать.");
+            bot.getApi().sendMessage(message->chat->id, u8"Нажми /start, чтобы начать.", false, 0, getMainMenuKeyboard());
         }
         });
 
