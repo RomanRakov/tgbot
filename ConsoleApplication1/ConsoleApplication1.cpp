@@ -50,7 +50,6 @@ std::string cleanJson(const std::string& raw) {
         return ""; // Не найдено начало JSON
     }
 
-    // Попробуем найти конец JSON — } или ] (соответствующую скобку)
     int depth = 0;
     bool inString = false;
     for (size_t i = startPos; i < raw.size(); ++i) {
@@ -77,10 +76,9 @@ std::string cleanJson(const std::string& raw) {
 std::vector<Product> findCompatibleProducts(const Product& target, const std::vector<Product>& allProducts) {
     std::vector<Product> matches;
 
-    // Приводим к нижнему регистру только ASCII, чтобы сохранить кириллицу
     std::string targetBrandLower = toLowerASCII(target.brand);
     std::string targetNameLower = toLowerASCII(target.name);
-    std::string targetDescLower = toLowerASCII(target.description.substr(0, 10)); // первые 10 символов описания
+    std::string targetDescLower = toLowerASCII(target.description.substr(0, 10)); 
 
     for (const auto& p : allProducts) {
         if (p.id == target.id) continue;
@@ -110,7 +108,6 @@ std::map<std::string, std::vector<std::string>> compatibleCategoriesMap = {
 std::vector<Product> findCompatibleByCategory(const Product& targetProduct, const std::vector<Product>& allProducts) {
     std::vector<Product> compatibleProducts;
 
-    // Получаем список совместимых категорий для текущей категории товара
     auto it = compatibleCategoriesMap.find(targetProduct.category_name);
     if (it == compatibleCategoriesMap.end()) {
         return compatibleProducts; // Совместимости нет — возвращаем пустой список
@@ -119,10 +116,9 @@ std::vector<Product> findCompatibleByCategory(const Product& targetProduct, cons
     const std::vector<std::string>& compatibleCats = it->second;
 
 
-    // Фильтруем товары по совместимым категориям
     for (const auto& product : allProducts) {
         if (std::find(compatibleCats.begin(), compatibleCats.end(), product.category_name) != compatibleCats.end() &&
-            product.id != targetProduct.id) {  // Исключаем сам товар
+            product.id != targetProduct.id) {  
             compatibleProducts.push_back(product);
         }
     }
