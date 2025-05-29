@@ -17,6 +17,7 @@
 #include <io.h>
 #include <fcntl.h>
 #include <string>
+#include <set>
 
 
 std::string toLowerASCII(const std::string& str) {
@@ -72,26 +73,42 @@ std::string cleanJson(const std::string& raw) {
     return raw.substr(startPos);
 };
 
-
-std::vector<Product> findCompatibleProducts(const Product& target, const std::vector<Product>& allProducts) {
+std::vector<Product> findCompatibleProductsAdvanced(const Product& target, const std::vector<Product>& allProducts) {
     std::vector<Product> matches;
 
+    auto tokenize = [](const std::string& text) -> std::set<std::string> {
+        std::istringstream stream(toLowerASCII(text));
+        std::set<std::string> tokens;
+        std::string word;
+        while (stream >> word) {
+            if (word.length() > 2) tokens.insert(word);
+        }
+        return tokens;
+        };
+
+    std::set<std::string> targetTokens = tokenize(target.name + " " + target.description);
     std::string targetBrandLower = toLowerASCII(target.brand);
-    std::string targetNameLower = toLowerASCII(target.name);
-    std::string targetDescLower = toLowerASCII(target.description.substr(0, 10));
 
     for (const auto& p : allProducts) {
         if (p.id == target.id) continue;
 
-        std::string combined = p.name + " " + p.description + " " + p.brand;
-        std::string combinedLower = toLowerASCII(combined);
+        int score = 0;
 
-        if ((!targetBrandLower.empty() && combinedLower.find(targetBrandLower) != std::string::npos) ||
-            (!targetNameLower.empty() && combinedLower.find(targetNameLower) != std::string::npos) ||
-            (!targetDescLower.empty() && combinedLower.find(targetDescLower) != std::string::npos)) {
+        if (toLowerASCII(p.brand) == targetBrandLower) score += 3;
+        if (p.category_name == target.category_name) score += 2;
+
+        std::set<std::string> productTokens = tokenize(p.name + " " + p.description);
+        int commonWords = std::count_if(
+            targetTokens.begin(), targetTokens.end(),
+            [&](const std::string& word) { return productTokens.count(word) > 0; }
+        );
+        score += commonWords;
+
+        if (score >= 4) {
             matches.push_back(p);
         }
     }
+
     return matches;
 }
 
@@ -104,27 +121,38 @@ std::map<std::string, std::vector<std::string>> compatibleCategoriesMap = {
     {"Кроссовки", {"Футболки", "Брюки"}}
 };
 
-std::vector<Product> findCompatibleByCategory(const Product& targetProduct, const std::vector<Product>& allProducts) {
+std::vector<Product> findCompatibleByCategoryFlexible(const Product& targetProduct, const std::vector<Product>& allProducts) {
     std::vector<Product> compatibleProducts;
 
     auto it = compatibleCategoriesMap.find(targetProduct.category_name);
-    if (it == compatibleCategoriesMap.end()) {
-        return compatibleProducts;
+    bool fallbackMode = (it == compatibleCategoriesMap.end());
+
+    std::set<std::string> compatibleCats;
+    if (!fallbackMode) {
+        compatibleCats.insert(it->second.begin(), it->second.end());
     }
 
-    const std::vector<std::string>& compatibleCats = it->second;
-
+    std::set<std::string> addedCategories;
 
     for (const auto& product : allProducts) {
-        if (std::find(compatibleCats.begin(), compatibleCats.end(), product.category_name) != compatibleCats.end() &&
-            product.id != targetProduct.id) {
-            compatibleProducts.push_back(product);
+        if (product.id == targetProduct.id) continue;
+
+        if (!fallbackMode) {
+            if (compatibleCats.count(product.category_name)) {
+                compatibleProducts.push_back(product);
+            }
+        }
+        else {
+            if (product.category_name != targetProduct.category_name &&
+                addedCategories.count(product.category_name) == 0) {
+                compatibleProducts.push_back(product);
+                addedCategories.insert(product.category_name);
+            }
         }
     }
 
     return compatibleProducts;
 }
-
 
 
 extern std::map<std::string, std::string> careTipsMap;
@@ -150,8 +178,8 @@ int main() {
         std::map<char, int> answers;
         int lastQuestionMessageId = 0;
         bool awaitingProductId = false;
-        Product currentProduct;                
-        std::vector<Product> allProducts;    
+        Product currentProduct;
+        std::vector<Product> allProducts;
     };
 
 
@@ -410,14 +438,14 @@ int main() {
         int64_t chatId = query->message->chat->id;
         int messageId = query->message->messageId;
         std::string data = query->data;
-
         if (data == "main_menu") {
-            bot.getApi().editMessageText(u8"✨ Привет! Я твой личный помощник по стилю.\n\nЧто ты хочешь сделать?", chatId, messageId, "", "Markdown", false, getMainMenuKeyboard());
             if (users.count(chatId)) {
-                users.erase(chatId);
+                users[chatId].awaitingProductId = false;
+                users[chatId].currentProduct = Product();
+                users[chatId].allProducts.clear();
             }
-
-            return;
+            bot.getApi().editMessageText(u8"✨ Привет! Я твой личный помощник по стилю.\n\nЧто ты хочешь сделать?",
+                chatId, messageId, "", "Markdown", false, getMainMenuKeyboard());
         }
         if (data == "care_tips") {
             if (users.count(chatId) && !users[chatId].currentProduct.name.empty()) {
@@ -425,7 +453,7 @@ int main() {
                 std::string category = target.category_name;
                 std::string tip = u8"ℹ️ Совет по уходу:\n";
 
-                auto it = careTipsMap.find(category); 
+                auto it = careTipsMap.find(category);
                 if (it != careTipsMap.end()) {
                     tip += it->second;
                 }
@@ -564,7 +592,7 @@ int main() {
                 const auto& target = users[chatId].currentProduct;
                 const auto& allProducts = users[chatId].allProducts;
 
-                std::vector<Product> matches = findCompatibleProducts(target, allProducts);
+                std::vector<Product> matches = findCompatibleProductsAdvanced(target, allProducts);
 
                 if (!matches.empty()) {
                     bot.getApi().sendMessage(chatId, u8"🧩 Рекомендуемые товары:");
@@ -579,6 +607,15 @@ int main() {
                             bot.getApi().sendMessage(chatId, matchMsg);
                         }
                     }
+                    TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
+                    std::vector<TgBot::InlineKeyboardButton::Ptr> row;
+                    TgBot::InlineKeyboardButton::Ptr btnBack(new TgBot::InlineKeyboardButton);
+                    btnBack->text = u8"⬅️ Назад к поиску";
+                    btnBack->callbackData = "back_to_search";
+                    row.push_back(btnBack);
+                    keyboard->inlineKeyboard.push_back(row);
+
+                    bot.getApi().sendMessage(chatId, u8"Назад к поиску", false, 0, keyboard);
                 }
                 else {
                     bot.getApi().sendMessage(chatId, u8"🔎 Рекомендуемых товаров не найдено.");
@@ -594,7 +631,7 @@ int main() {
                 const auto& target = users[chatId].currentProduct;
                 const auto& allProducts = users[chatId].allProducts;
 
-                std::vector<Product> matches = findCompatibleByCategory(target, allProducts);
+                std::vector<Product> matches = findCompatibleByCategoryFlexible(target, allProducts);
 
                 if (!matches.empty()) {
                     bot.getApi().sendMessage(chatId, u8"🧩 Совместимые товары по категории:");
@@ -609,6 +646,15 @@ int main() {
                             bot.getApi().sendMessage(chatId, matchMsg);
                         }
                     }
+                    TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
+                    std::vector<TgBot::InlineKeyboardButton::Ptr> row;
+                    TgBot::InlineKeyboardButton::Ptr btnBack(new TgBot::InlineKeyboardButton);
+                    btnBack->text = u8"⬅️ Назад к поиску";
+                    btnBack->callbackData = "back_to_search";
+                    row.push_back(btnBack);
+                    keyboard->inlineKeyboard.push_back(row);
+
+                    bot.getApi().sendMessage(chatId, u8"Назад к поиску", false, 0, keyboard);
                 }
                 else {
                     bot.getApi().sendMessage(chatId, u8"🔎 Совместимых товаров по категории не найдено.");
@@ -647,6 +693,17 @@ int main() {
 
             bot.getApi().editMessageText(u8"⚙️ Настройки:\n\nЗдесь ты можешь настроить параметры бота.", chatId, messageId, "", "Markdown", false, keyboard);
 
+        }
+
+        if (data == "back_to_search") {
+            users[chatId].awaitingProductId = true;
+            try {
+                bot.getApi().deleteMessage(chatId, messageId);
+            }
+            catch (const TgBot::TgException& e) {
+                std::cerr << "Error deleting message: " << e.what() << std::endl;
+            }
+            bot.getApi().sendMessage(chatId, u8"📦 Введите ID товара для поиска:");
         }
 
         if (data == "toggle_daily_tips") {
@@ -770,7 +827,6 @@ int main() {
                                 btnMatch->text = u8"👕 С чем сочетать";
                                 btnMatch->callbackData = "match_products";
                                 row1.push_back(btnMatch);
-
                                 keyboard->inlineKeyboard.push_back(row1);
 
                                 std::vector<TgBot::InlineKeyboardButton::Ptr> row2;
@@ -778,8 +834,19 @@ int main() {
                                 btnCare->text = u8"🧼 Как ухаживать";
                                 btnCare->callbackData = "care_tips";
                                 row2.push_back(btnCare);
-
                                 keyboard->inlineKeyboard.push_back(row2);
+
+                                std::vector<TgBot::InlineKeyboardButton::Ptr> rowNav;
+                                TgBot::InlineKeyboardButton::Ptr btnBack(new TgBot::InlineKeyboardButton);
+                                btnBack->text = u8"⬅️ Назад к поиску";
+                                btnBack->callbackData = "back_to_search";
+                                rowNav.push_back(btnBack);
+
+                                TgBot::InlineKeyboardButton::Ptr btnMenu(new TgBot::InlineKeyboardButton);
+                                btnMenu->text = u8"🏠 Главное меню";
+                                btnMenu->callbackData = "main_menu";
+                                rowNav.push_back(btnMenu);
+                                keyboard->inlineKeyboard.push_back(rowNav);
 
                                 return keyboard;
                                 };
@@ -805,6 +872,11 @@ int main() {
             catch (...) {
                 bot.getApi().sendMessage(chatId, u8"❌ Введите корректный номер товара.");
             }
+        }
+        else if (message->text == u8"⬅️ Назад к поиску") {
+            users[chatId].awaitingProductId = true;
+            users[chatId].awaitingProductId = true;
+            bot.getApi().sendMessage(chatId, u8"📦 Введите ID товара для поиска:");
         }
         else if (!StringTools::startsWith(message->text, "/")) {
             bot.getApi().sendMessage(chatId, u8"Нажми /start, чтобы начать.", false, 0, getMainMenuKeyboard());
