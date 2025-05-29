@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <string>
 
+
 std::string toLowerASCII(const std::string& str) {
     std::string result = str;
     std::transform(result.begin(), result.end(), result.begin(),
@@ -46,7 +47,7 @@ using json = nlohmann::json;
 std::string cleanJson(const std::string& raw) {
     auto startPos = raw.find_first_of("{[");
     if (startPos == std::string::npos) {
-        return ""; 
+        return "";
     }
 
     int depth = 0;
@@ -77,7 +78,7 @@ std::vector<Product> findCompatibleProducts(const Product& target, const std::ve
 
     std::string targetBrandLower = toLowerASCII(target.brand);
     std::string targetNameLower = toLowerASCII(target.name);
-    std::string targetDescLower = toLowerASCII(target.description.substr(0, 10)); 
+    std::string targetDescLower = toLowerASCII(target.description.substr(0, 10));
 
     for (const auto& p : allProducts) {
         if (p.id == target.id) continue;
@@ -108,7 +109,7 @@ std::vector<Product> findCompatibleByCategory(const Product& targetProduct, cons
 
     auto it = compatibleCategoriesMap.find(targetProduct.category_name);
     if (it == compatibleCategoriesMap.end()) {
-        return compatibleProducts; 
+        return compatibleProducts;
     }
 
     const std::vector<std::string>& compatibleCats = it->second;
@@ -116,13 +117,17 @@ std::vector<Product> findCompatibleByCategory(const Product& targetProduct, cons
 
     for (const auto& product : allProducts) {
         if (std::find(compatibleCats.begin(), compatibleCats.end(), product.category_name) != compatibleCats.end() &&
-            product.id != targetProduct.id) {  
+            product.id != targetProduct.id) {
             compatibleProducts.push_back(product);
         }
     }
 
     return compatibleProducts;
 }
+
+
+
+extern std::map<std::string, std::string> careTipsMap;
 
 int main() {
     SetConsoleOutputCP(CP_UTF8);
@@ -145,7 +150,10 @@ int main() {
         std::map<char, int> answers;
         int lastQuestionMessageId = 0;
         bool awaitingProductId = false;
+        Product currentProduct;                
+        std::vector<Product> allProducts;    
     };
+
 
     struct Question {
         std::string text;
@@ -175,6 +183,20 @@ int main() {
         u8"👟 Совет дня: Сочетайте спортивные штаны с футболкой оверсайз для удобного образа.",
         u8"🧢 Совет дня: Носите бейсболку для защиты от солнца и стильного вида.",
         u8"🎒 Совет дня: Выбирайте рюкзак с удобными лямками для активного образа жизни."
+    };
+
+    std::map<std::string, std::string> careTipsMap = {
+    {"Футболки", u8"🧼 Стирать при температуре не выше 30°C, избегать отбеливателя."},
+    {"Рубашки", u8"🧼 Гладить с изнаночной стороны, использовать щадящий режим стирки."},
+    {"Платья", u8"🧼 Рекомендуется ручная стирка или деликатный режим. Не выкручивайте."},
+    {"Куртки", u8"🧼 Чистить водоотталкивающую пропитку раз в сезон. Не использовать кондиционер."},
+    {"Брюки", u8"🧼 Перед стиркой выворачивать наизнанку. Использовать мягкий порошок."},
+    {"Кроссовки", u8"🧼 Мочить не полностью. Использовать специальные средства для замши/кожи."},
+    {"Туфли", u8"🧼 Использовать крем подходящего цвета и беречь от дождя."},
+    {"Джинсы", u8"🧼 Первые несколько раз стирать отдельно, чтобы не полиняли."},
+    {"Блузки", u8"🧼 Гладить при низкой температуре, использовать пар."},
+    {"Сандалии", u8"🧼 Протирать мягкой тканью после каждой носки."},
+    {"default", u8"🧼 Общий совет: хранить в сухом месте, чистить аккуратно."}
     };
 
     std::vector<std::string> romanticStyleTips = {
@@ -384,7 +406,7 @@ int main() {
         bot.getApi().sendMessage(chat_id, u8"✨ Привет! Я твой личный помощник по стилю.\n\nЧто ты хочешь сделать?", false, 0, getMainMenuKeyboard());
         });
 
-    bot.getEvents().onCallbackQuery([&bot, &users, &questions, &getAnswerButtons, &isDailyTipsEnabled, &setDailyTipsEnabled, &setUserStyle, &previousQuestionMessageIds, &getMainMenuKeyboard](TgBot::CallbackQuery::Ptr query) {
+    bot.getEvents().onCallbackQuery([&bot, &users, &questions, &getAnswerButtons, &isDailyTipsEnabled, &setDailyTipsEnabled, &setUserStyle, &previousQuestionMessageIds, &getMainMenuKeyboard, &careTipsMap](TgBot::CallbackQuery::Ptr query) {
         int64_t chatId = query->message->chat->id;
         int messageId = query->message->messageId;
         std::string data = query->data;
@@ -392,12 +414,31 @@ int main() {
         if (data == "main_menu") {
             bot.getApi().editMessageText(u8"✨ Привет! Я твой личный помощник по стилю.\n\nЧто ты хочешь сделать?", chatId, messageId, "", "Markdown", false, getMainMenuKeyboard());
             if (users.count(chatId)) {
-                users.erase(chatId);  
+                users.erase(chatId);
             }
 
             return;
         }
+        if (data == "care_tips") {
+            if (users.count(chatId) && !users[chatId].currentProduct.name.empty()) {
+                const auto& target = users[chatId].currentProduct;
+                std::string category = target.category_name;
+                std::string tip = u8"ℹ️ Совет по уходу:\n";
 
+                auto it = careTipsMap.find(category); 
+                if (it != careTipsMap.end()) {
+                    tip += it->second;
+                }
+                else {
+                    tip = careTipsMap["default"];
+                }
+
+                bot.getApi().sendMessage(chatId, tip);
+            }
+            else {
+                bot.getApi().sendMessage(chatId, u8"❌ Нет активного товара для анализа.");
+            }
+        }
 
         if (data == "search_product") {
             users[chatId].awaitingProductId = true;
@@ -518,6 +559,66 @@ int main() {
             }
         }
 
+        if (data == "similar_products") {
+            if (users.count(chatId) && !users[chatId].currentProduct.name.empty()) {
+                const auto& target = users[chatId].currentProduct;
+                const auto& allProducts = users[chatId].allProducts;
+
+                std::vector<Product> matches = findCompatibleProducts(target, allProducts);
+
+                if (!matches.empty()) {
+                    bot.getApi().sendMessage(chatId, u8"🧩 Рекомендуемые товары:");
+                    for (const auto& m : matches) {
+                        std::string url = "http://localhost:18080/card?id=" + std::to_string(m.id);
+                        std::string matchMsg = u8"• " + m.name + "\n" + m.description + "\n" + url;
+
+                        if (!m.image_url.empty()) {
+                            bot.getApi().sendPhoto(chatId, m.image_url, matchMsg);
+                        }
+                        else {
+                            bot.getApi().sendMessage(chatId, matchMsg);
+                        }
+                    }
+                }
+                else {
+                    bot.getApi().sendMessage(chatId, u8"🔎 Рекомендуемых товаров не найдено.");
+                }
+            }
+            else {
+                bot.getApi().sendMessage(chatId, u8"❌ Нет активного товара для анализа.");
+            }
+        }
+
+        if (data == "match_products") {
+            if (users.count(chatId) && !users[chatId].currentProduct.name.empty()) {
+                const auto& target = users[chatId].currentProduct;
+                const auto& allProducts = users[chatId].allProducts;
+
+                std::vector<Product> matches = findCompatibleByCategory(target, allProducts);
+
+                if (!matches.empty()) {
+                    bot.getApi().sendMessage(chatId, u8"🧩 Совместимые товары по категории:");
+                    for (const auto& m : matches) {
+                        std::string url = "http://localhost:18080/card?id=" + std::to_string(m.id);
+                        std::string matchMsg = u8"• " + m.name + "\n" + m.description + "\n" + url;
+
+                        if (!m.image_url.empty()) {
+                            bot.getApi().sendPhoto(chatId, m.image_url, matchMsg);
+                        }
+                        else {
+                            bot.getApi().sendMessage(chatId, matchMsg);
+                        }
+                    }
+                }
+                else {
+                    bot.getApi().sendMessage(chatId, u8"🔎 Совместимых товаров по категории не найдено.");
+                }
+            }
+            else {
+                bot.getApi().sendMessage(chatId, u8"❌ Нет активного товара для анализа.");
+            }
+        }
+
         if (data == "settings") {
             TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
 
@@ -584,216 +685,191 @@ int main() {
 
         bot.getApi().answerCallbackQuery(query->id);
         });
-        bot.getEvents().onAnyMessage([&bot, &users, &getMainMenuKeyboard](TgBot::Message::Ptr message) {
-            if (message->text.empty()) return;
+    bot.getEvents().onAnyMessage([&bot, &users, &getMainMenuKeyboard](TgBot::Message::Ptr message) {
+        if (message->text.empty()) return;
 
-            int64_t chatId = message->chat->id;
+        int64_t chatId = message->chat->id;
 
-            if (users.count(chatId) && users[chatId].awaitingProductId) {
-                std::string input = message->text;
-                input.erase(std::remove_if(input.begin(), input.end(), ::isspace), input.end());
+        if (users.count(chatId) && users[chatId].awaitingProductId) {
+            std::string input = message->text;
+            input.erase(std::remove_if(input.begin(), input.end(), ::isspace), input.end());
 
-                if (!std::all_of(input.begin(), input.end(), ::isdigit)) {
-                    bot.getApi().sendMessage(chatId, u8"❌ Введите корректный номер товара (только цифры).");
-                    return;
-                }
+            if (!std::all_of(input.begin(), input.end(), ::isdigit)) {
+                bot.getApi().sendMessage(chatId, u8"❌ Введите корректный номер товара (только цифры).");
+                return;
+            }
 
-                try {
-                    int productId = std::stoi(input);
-                    std::string apiUrl = "http://localhost:18080/api/product/" + std::to_string(productId);
-                    cpr::Response r = cpr::Get(cpr::Url{ apiUrl });
+            try {
+                int productId = std::stoi(input);
+                std::string apiUrl = "http://localhost:18080/api/product/" + std::to_string(productId);
+                cpr::Response r = cpr::Get(cpr::Url{ apiUrl });
 
-                    std::string rawResponse = r.text;
-                    std::string jsonString = cleanJson(rawResponse);
+                std::string rawResponse = r.text;
+                std::string jsonString = cleanJson(rawResponse);
 
+                if (r.status_code == 200) {
+                    try {
+                        auto j = json::parse(jsonString);
+                        Product target;
+                        target.id = j.value("id", -1);
+                        target.name = j.value("name", "");
+                        target.description = j.value("description", "");
+                        target.brand = j.value("brand", "");
+                        target.image_url = j.value("image_url", "");
+                        target.category_name = j.value("category", "");
 
-                    if (r.status_code == 200) {
-                        try {
-                            auto j = json::parse(jsonString);
-                            Product target;
-                            target.id = j.value("id", -1);
-                            target.name = j.value("name", "");
-                            target.description = j.value("description", "");
-                            target.brand = j.value("brand", "");
-                            target.image_url = j.value("image_url", "");
-                            target.category_name = j.value("category", "");
+                        if (target.id > 0 && !target.name.empty()) {
+                            std::string productUrl = "http://localhost:18080/card?id=" + std::to_string(productId);
+                            std::string messageText = u8"Название: " + target.name + "\n" +
+                                u8"Описание: " + target.description + "\n\n" +
+                                u8"Ссылка на товар: " + productUrl;
 
-                            if (target.id > 0 && !target.name.empty()) {
-                                std::string productUrl = "http://localhost:18080/card?id=" + std::to_string(productId);
-                                std::string messageText = u8"Название: " + target.name + "\n" +
-                                    u8"Описание: " + target.description + "\n\n" +
-                                    u8"Ссылка на товар: " + productUrl;
+                            if (!target.image_url.empty()) {
+                                bot.getApi().sendPhoto(chatId, target.image_url, messageText);
+                            }
+                            else {
+                                bot.getApi().sendMessage(chatId, messageText);
+                            }
 
-                                if (!target.image_url.empty()) {
-                                    bot.getApi().sendPhoto(chatId, target.image_url, messageText);
-                                }
-                                else {
-                                    bot.getApi().sendMessage(chatId, messageText);
-                                }
+                            cpr::Response allResp = cpr::Get(cpr::Url{ "http://localhost:18080/api/products" });
+                            std::vector<Product> allProducts;
 
-                                cpr::Response allResp = cpr::Get(cpr::Url{ "http://localhost:18080/api/products" });
-
-                                if (allResp.status_code == 200) {
-                                    std::string cleanedAll = cleanJson(allResp.text);
-                                    auto allJson = json::parse(cleanedAll);
-
-                                    std::vector<Product> allProducts;
-                                    for (const auto& item : allJson) {
-                                        Product p;
-                                        p.id = item.value("id", -1);
-                                        p.name = item.value("name", "");
-                                        p.description = item.value("description", "");
-                                        p.brand = item.value("brand", "");
-                                        p.image_url = item.value("image_url", "");
-                                        p.category_name = item.value("category", "");
-                                        if (p.id > 0) {
-                                            allProducts.push_back(p);
-                                        }
+                            if (allResp.status_code == 200) {
+                                std::string cleanedAll = cleanJson(allResp.text);
+                                auto allJson = json::parse(cleanedAll);
+                                for (const auto& item : allJson) {
+                                    Product p;
+                                    p.id = item.value("id", -1);
+                                    p.name = item.value("name", "");
+                                    p.description = item.value("description", "");
+                                    p.brand = item.value("brand", "");
+                                    p.image_url = item.value("image_url", "");
+                                    p.category_name = item.value("category", "");
+                                    if (p.id > 0) {
+                                        allProducts.push_back(p);
                                     }
-                                    std::vector<Product> matches = findCompatibleProducts(target, allProducts);
-
-                                    if (!matches.empty()) {
-                                        bot.getApi().sendMessage(chatId, u8"🧩 Рекомендуемые товары:");
-                                        for (const auto& m : matches) {
-                                            std::string url = "http://localhost:18080/card?id=" + std::to_string(m.id);
-                                            std::string matchMsg = u8"• " + m.name + "\n" + m.description + "\n" + url;
-
-
-                                            if (!m.image_url.empty()) {
-                                                try {
-                                                    bot.getApi().sendPhoto(chatId, m.image_url, matchMsg);
-                                                }
-                                                catch (const std::exception& e) {
-                                                    std::cout << u8"[ERROR] Ошибка при отправке изображения рекомендуемого товара: " << e.what() << std::endl;
-                                                    bot.getApi().sendMessage(chatId, matchMsg);
-                                                }
-                                            }
-                                            else {
-                                                bot.getApi().sendMessage(chatId, matchMsg);
-                                            }
-                                        }
-                                    }
-                                    else {
-                                        bot.getApi().sendMessage(chatId, u8"🔎 Рекомендуемых товаров не найдено.");
-                                    }
-
-                                    std::vector<Product> matchesCategory = findCompatibleByCategory(target, allProducts);
-
-                                    if (!matchesCategory.empty()) {
-                                        bot.getApi().sendMessage(chatId, u8"🧩 Совместимые товары по категории:");
-                                        for (const auto& m : matchesCategory) {
-                                            std::string url = "http://localhost:18080/card?id=" + std::to_string(m.id);
-                                            std::string matchMsg = u8"• " + m.name + "\n" + m.description + "\n" + url;
-
-                                            if (!m.image_url.empty()) {
-                                                try {
-                                                    bot.getApi().sendPhoto(chatId, m.image_url, matchMsg);
-                                                }
-                                                catch (const std::exception& e) {
-                                                    std::cout << u8"[ERROR] Ошибка при отправке изображения похожего товара: " << e.what() << std::endl;
-                                                    bot.getApi().sendMessage(chatId, matchMsg);
-                                                }
-                                            }
-                                            else {
-                                                bot.getApi().sendMessage(chatId, matchMsg);
-                                            }
-                                        }
-                                    }
-                                    else {
-                                        bot.getApi().sendMessage(chatId, u8"🔎 Совместимых товаров по категории не найдено.");
-                                    }
-
-                                }
-                                else {
-                                    bot.getApi().sendMessage(chatId, u8"⚠️ Не удалось загрузить список всех товаров.");
                                 }
                             }
                             else {
-                                bot.getApi().sendMessage(chatId, u8"❌ Товар с таким ID не найден.");
+                                bot.getApi().sendMessage(chatId, u8"⚠️ Не удалось загрузить список всех товаров.");
                             }
 
-                        }
-                        catch (const std::exception& e) {
-                            std::cout << u8"[ERROR] JSON parse error: " << e.what() << std::endl;
-                            bot.getApi().sendMessage(chatId, u8"⚠️ Ошибка при обработке данных товара.");
-                        }
-                    }
-                    else {
-                        bot.getApi().sendMessage(chatId, u8"⚠️ Ошибка при запросе товара с сервера.");
-                    }
+                            users[chatId].currentProduct = target;
+                            users[chatId].allProducts = allProducts;
 
+                            auto getProductMenuKeyboard = []() -> TgBot::InlineKeyboardMarkup::Ptr {
+                                TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
 
-                    users[chatId].awaitingProductId = false;
-                }
-                catch (...) {
-                    bot.getApi().sendMessage(chatId, u8"❌ Введите корректный номер товара.");
-                }
-            }
-            else if (!StringTools::startsWith(message->text, "/")) {
-                bot.getApi().sendMessage(chatId, u8"Нажми /start, чтобы начать.", false, 0, getMainMenuKeyboard());
-            }
-            });
+                                std::vector<TgBot::InlineKeyboardButton::Ptr> row1;
+                                TgBot::InlineKeyboardButton::Ptr btnSimilar(new TgBot::InlineKeyboardButton);
+                                btnSimilar->text = u8"🔄 Похожие товары";
+                                btnSimilar->callbackData = "similar_products";
+                                row1.push_back(btnSimilar);
 
+                                TgBot::InlineKeyboardButton::Ptr btnMatch(new TgBot::InlineKeyboardButton);
+                                btnMatch->text = u8"👕 С чем сочетать";
+                                btnMatch->callbackData = "match_products";
+                                row1.push_back(btnMatch);
 
-            std::thread dailyTipThread([&bot, &db, &classicStyleTips, &sportStyleTips, &romanticStyleTips, &dramaticStyleTips, &getStyleTips]() {
-                while (true) {
-                    std::time_t t = std::time(nullptr) + 3 * 3600;
-                    std::tm now;
-                    gmtime_s(&now, &t);
+                                keyboard->inlineKeyboard.push_back(row1);
 
-                    if (now.tm_hour == 20 && now.tm_min == 17) {
-                        std::string sql = "SELECT chat_id, style FROM users WHERE daily_tips_enabled = 1 AND style IS NOT NULL;";
-                        sqlite3_stmt* stmt;
-                        if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL) == SQLITE_OK) {
-                            while (sqlite3_step(stmt) == SQLITE_ROW) {
-                                int64_t chatId = sqlite3_column_int64(stmt, 0);
-                                const char* styleChar = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+                                std::vector<TgBot::InlineKeyboardButton::Ptr> row2;
+                                TgBot::InlineKeyboardButton::Ptr btnCare(new TgBot::InlineKeyboardButton);
+                                btnCare->text = u8"🧼 Как ухаживать";
+                                btnCare->callbackData = "care_tips";
+                                row2.push_back(btnCare);
 
-                                if (styleChar != nullptr && strlen(styleChar) == 1) {
-                                    char style = styleChar[0];
+                                keyboard->inlineKeyboard.push_back(row2);
 
-                                    std::vector<std::string>& styleTips = getStyleTips(style);
-                                    if (!styleTips.empty()) {
-                                        std::string tip = styleTips[std::rand() % styleTips.size()];
-                                        try {
-                                            bot.getApi().sendMessage(chatId, tip);
-                                        }
-                                        catch (const std::exception& e) {
-                                            std::cerr << "Failed to send message to " << chatId << ": " << e.what() << std::endl;
-                                        }
-                                    }
-                                    else {
-                                        std::cerr << "No tips found for style: " << style << std::endl;
-                                    }
-                                }
-                                else {
-                                    std::cerr << "Invalid or missing style for chat_id: " << chatId << std::endl;
-                                }
-                            }
-                            sqlite3_finalize(stmt);
+                                return keyboard;
+                                };
+
+                            bot.getApi().sendMessage(chatId, u8"Выберите действие:", false, 0, getProductMenuKeyboard());
                         }
                         else {
-                            std::cerr << "Failed to prepare select statement\n";
+                            bot.getApi().sendMessage(chatId, u8"❌ Товар с таким ID не найден.");
                         }
-                        std::this_thread::sleep_for(std::chrono::seconds(60));
+
                     }
-                    std::this_thread::sleep_for(std::chrono::seconds(30));
+                    catch (const std::exception& e) {
+                        std::cout << u8"[ERROR] JSON parse error: " << e.what() << std::endl;
+                        bot.getApi().sendMessage(chatId, u8"⚠️ Ошибка при обработке данных товара.");
+                    }
                 }
-                });
-
-            try {
-                printf("Bot username: %s\n", bot.getApi().getMe()->username.c_str());
-                TgBot::TgLongPoll longPoll(bot);
-                while (true) {
-                    printf("Long poll started\n");
-                    longPoll.start();
+                else {
+                    bot.getApi().sendMessage(chatId, u8"⚠️ Ошибка при запросе товара с сервера.");
                 }
-            }
-            catch (TgBot::TgException& e) {
-                printf("error: %s\n", e.what());
-            }
 
-            dailyTipThread.detach();
-            sqlite3_close(db);
-            return 0;
+                users[chatId].awaitingProductId = false;
+            }
+            catch (...) {
+                bot.getApi().sendMessage(chatId, u8"❌ Введите корректный номер товара.");
+            }
+        }
+        else if (!StringTools::startsWith(message->text, "/")) {
+            bot.getApi().sendMessage(chatId, u8"Нажми /start, чтобы начать.", false, 0, getMainMenuKeyboard());
+        }
+        });
+
+    std::thread dailyTipThread([&bot, &db, &classicStyleTips, &sportStyleTips, &romanticStyleTips, &dramaticStyleTips, &getStyleTips]() {
+        while (true) {
+            std::time_t t = std::time(nullptr) + 3 * 3600;
+            std::tm now;
+            gmtime_s(&now, &t);
+
+            if (now.tm_hour == 20 && now.tm_min == 17) {
+                std::string sql = "SELECT chat_id, style FROM users WHERE daily_tips_enabled = 1 AND style IS NOT NULL;";
+                sqlite3_stmt* stmt;
+                if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL) == SQLITE_OK) {
+                    while (sqlite3_step(stmt) == SQLITE_ROW) {
+                        int64_t chatId = sqlite3_column_int64(stmt, 0);
+                        const char* styleChar = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+
+                        if (styleChar != nullptr && strlen(styleChar) == 1) {
+                            char style = styleChar[0];
+
+                            std::vector<std::string>& styleTips = getStyleTips(style);
+                            if (!styleTips.empty()) {
+                                std::string tip = styleTips[std::rand() % styleTips.size()];
+                                try {
+                                    bot.getApi().sendMessage(chatId, tip);
+                                }
+                                catch (const std::exception& e) {
+                                    std::cerr << "Failed to send message to " << chatId << ": " << e.what() << std::endl;
+                                }
+                            }
+                            else {
+                                std::cerr << "No tips found for style: " << style << std::endl;
+                            }
+                        }
+                        else {
+                            std::cerr << "Invalid or missing style for chat_id: " << chatId << std::endl;
+                        }
+                    }
+                    sqlite3_finalize(stmt);
+                }
+                else {
+                    std::cerr << "Failed to prepare select statement\n";
+                }
+                std::this_thread::sleep_for(std::chrono::seconds(60));
+            }
+            std::this_thread::sleep_for(std::chrono::seconds(30));
+        }
+        });
+
+    try {
+        printf("Bot username: %s\n", bot.getApi().getMe()->username.c_str());
+        TgBot::TgLongPoll longPoll(bot);
+        while (true) {
+            printf("Long poll started\n");
+            longPoll.start();
+        }
+    }
+    catch (TgBot::TgException& e) {
+        printf("error: %s\n", e.what());
+    }
+
+    dailyTipThread.detach();
+    sqlite3_close(db);
+    return 0;
 }
