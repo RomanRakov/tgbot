@@ -97,3 +97,22 @@ TgBot::InlineKeyboardMarkup::Ptr KeyboardFactory::getSettingsKeyboard(bool tipsE
 
     return keyboard;
 }
+
+TgBot::InlineKeyboardMarkup::Ptr KeyboardFactory::getBackAndMenuKeyboard() {
+    TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
+
+    std::vector<TgBot::InlineKeyboardButton::Ptr> row;
+    auto backBtn = TgBot::InlineKeyboardButton::Ptr(new TgBot::InlineKeyboardButton);
+    backBtn->text = u8"⬅️ Назад";
+    backBtn->callbackData = "back_to_product_menu";
+
+    auto menuBtn = TgBot::InlineKeyboardButton::Ptr(new TgBot::InlineKeyboardButton);
+    menuBtn->text = u8"🏠 Главное меню";
+    menuBtn->callbackData = "main_menu";
+
+    row.push_back(backBtn);
+    row.push_back(menuBtn);
+    keyboard->inlineKeyboard.push_back(row);
+
+    return keyboard;
+}

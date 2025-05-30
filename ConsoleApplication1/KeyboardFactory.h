@@ -9,7 +9,8 @@ public:
     static TgBot::InlineKeyboardMarkup::Ptr getAnswerButtons(bool allowBack);
     static TgBot::InlineKeyboardMarkup::Ptr getProductMenuKeyboard();
     static TgBot::InlineKeyboardMarkup::Ptr getSettingsKeyboard(bool tipsEnabled);
+    static TgBot::InlineKeyboardMarkup::Ptr getBackAndMenuKeyboard();
 };
 
-#endif // KEYBOARD_FACTORY_H
+#endif 
 #pragma once

@@ -8,6 +8,35 @@
 
 using json = nlohmann::json;
 
+std::string cleanJson(const std::string& raw) {
+    auto startPos = raw.find_first_of("{[");
+    if (startPos == std::string::npos) {
+        return "";
+    }
+
+    int depth = 0;
+    bool inString = false;
+    for (size_t i = startPos; i < raw.size(); ++i) {
+        char c = raw[i];
+        if (c == '"' && (i == 0 || raw[i - 1] != '\\')) {
+            inString = !inString;
+        }
+        if (!inString) {
+            if (c == '{' || c == '[') {
+                ++depth;
+            }
+            else if (c == '}' || c == ']') {
+                --depth;
+                if (depth == 0) {
+                    return raw.substr(startPos, i - startPos + 1);
+                }
+            }
+        }
+    }
+    return raw.substr(startPos);
+};
+
+
 BotHandler::BotHandler(const std::string& token, sqlite3* db)
     : bot(token), db(db),
     userService(db),
@@ -55,7 +84,7 @@ void BotHandler::setupHandlers() {
 void BotHandler::handleStart(TgBot::Message::Ptr message) {
     int64_t chatId = message->chat->id;
     userService.addUser(chatId);
-    users[chatId] = UserState(); // сбросить состояние
+    users[chatId] = UserState(); 
     bot.getApi().sendMessage(chatId,
         u8"✨ Привет! Я твой личный помощник по стилю.\n\nЧто ты хочешь сделать?",
         false, 0, KeyboardFactory::getMainMenuKeyboard());
@@ -95,6 +124,7 @@ void BotHandler::handleCallbackQuery(TgBot::CallbackQuery::Ptr query) {
         char answer = data[7];
         questionnaire.recordAnswer(chatId, answer);
         int step = ++users[chatId].step;
+
 
         try {
             bot.getApi().deleteMessage(chatId, previousQuestionMessageIds[chatId]);
@@ -158,6 +188,101 @@ void BotHandler::handleCallbackQuery(TgBot::CallbackQuery::Ptr query) {
             KeyboardFactory::getSettingsKeyboard(!current));
     }
 
+    else if (data == "similar_products") {
+        if (users.count(chatId) && !users[chatId].currentProduct.name.empty()) {
+            const auto& target = users[chatId].currentProduct;
+            const auto& all = users[chatId].allProducts;
+
+            auto matches = ProductService::findCompatibleProductsAdvanced(target, all);
+            if (!matches.empty()) {
+                bot.getApi().sendMessage(chatId, u8"🧩 Рекомендуемые товары:");
+                for (const auto& p : matches) {
+                    std::string url = u8"http://localhost:18080/card?id=" + std::to_string(p.id);
+                    std::string msg = u8"• " + p.name + "\n" + p.description + "\n" + url;
+                    if (!p.image_url.empty())
+                        bot.getApi().sendPhoto(chatId, p.image_url, msg);
+                    else
+                        bot.getApi().sendMessage(chatId, msg);
+                }
+                bot.getApi().sendMessage(chatId, u8"Выберите следующее действие:", false, 0, KeyboardFactory::getBackAndMenuKeyboard());
+
+            }
+
+            else {
+                bot.getApi().sendMessage(chatId, u8"🔎 Похожие товары не найдены.");
+            }
+        }
+        else {
+            bot.getApi().sendMessage(chatId, u8"❌ Нет активного товара.");
+        }
+    }
+    else if (data == "match_products") {
+        const auto& state = users[chatId];
+        if (!state.currentProduct.name.empty()) {
+            auto matches = ProductService::findCompatibleByCategoryFlexible(state.currentProduct, state.allProducts);
+            if (!matches.empty()) {
+                bot.getApi().sendMessage(chatId, u8"🧩 Совместимые товары по категории:");
+                for (const auto& p : matches) {
+                    std::string url = u8"http://localhost:18080/card?id=" + std::to_string(p.id);
+                    std::string msg = u8"• " + p.name + "\n" + p.description + "\n" + url;
+                    if (!p.image_url.empty())
+                        bot.getApi().sendPhoto(chatId, p.image_url, msg);
+                    else
+                        bot.getApi().sendMessage(chatId, msg);
+                }
+                bot.getApi().sendMessage(chatId, u8"Выберите следующее действие:", false, 0, KeyboardFactory::getBackAndMenuKeyboard());
+
+            }
+            else {
+                bot.getApi().sendMessage(chatId, u8"❌ Ничего не найдено.");
+            }
+        }
+        else {
+            bot.getApi().sendMessage(chatId, u8"❌ Нет активного товара.");
+        }
+    }
+    else if (data == "care_tips") {
+        const auto& product = users[chatId].currentProduct;
+
+        if (!product.name.empty()) {
+            std::string category = product.category_name;
+            std::string tip = u8"ℹ️ Совет по уходу:\n";
+
+            static const std::map<std::string, std::string> careTipsMap = {
+                {"Футболки", u8"👕 Стирать при 30°C, вывернув наизнанку. Избегать сушки в машине."},
+                {"Рубашки", u8"🧺 Гладить при средней температуре. Хранить на плечиках."},
+                {"Платья", u8"🌸 Стирать вручную или в режиме деликатной стирки."},
+                {"Кроссовки", u8"👟 Не стирать в машине. Протирать влажной тряпкой."},
+                {"Брюки", u8"🧼 Стирка при 30°C. Гладить через ткань."},
+                {"default", u8"🔧 Общий совет: читайте ярлык на изделии и избегайте высоких температур."}
+            };
+
+            if (careTipsMap.count(category)) {
+                tip += careTipsMap.at(category);
+            }
+            else {
+                tip += careTipsMap.at("default");
+            }
+
+            bot.getApi().sendMessage(chatId, tip);
+            bot.getApi().sendMessage(chatId, u8"Выберите следующее действие:", false, 0, KeyboardFactory::getBackAndMenuKeyboard());
+        }
+        else {
+            bot.getApi().sendMessage(chatId, u8"❌ Нет активного товара.");
+        }
+    }
+
+    else if (data == "back_to_search") {
+        users[chatId].awaitingProductId = true;
+        bot.getApi().sendMessage(chatId, u8"📦 Введите ID товара для поиска:");
+    }
+
+    else if (data == "back_to_product_menu") {
+        bot.getApi().sendMessage(chatId, u8"Выберите действие:", false, 0, KeyboardFactory::getProductMenuKeyboard());
+    }
+
+
+
     bot.getApi().answerCallbackQuery(query->id);
 }
 
@@ -178,60 +303,123 @@ void BotHandler::handleMessage(TgBot::Message::Ptr message) {
         std::string url = "http://localhost:18080/api/product/" + std::to_string(productId);
         cpr::Response r = cpr::Get(cpr::Url{ url });
 
-        if (r.status_code == 200) {
-            try {
-                std::string jsonStr = ProductService::cleanJson(r.text);
-                auto j = json::parse(jsonStr);
-                Product p;
-                p.id = j.value("id", -1);
-                p.name = j.value("name", "");
-                p.description = j.value("description", "");
-                p.brand = j.value("brand", "");
-                p.image_url = j.value("image_url", "");
-                p.category_name = j.value("category", "");
+        try {
+            int productId = std::stoi(input);
+            std::string apiUrl = "http://localhost:18080/api/product/" + std::to_string(productId);
+            cpr::Response r = cpr::Get(cpr::Url{ apiUrl });
 
-                if (p.id <= 0 || p.name.empty()) {
-                    bot.getApi().sendMessage(chatId, u8"❌ Товар не найден.");
-                    return;
-                }
+            std::string rawResponse = r.text;
+            std::string jsonString = cleanJson(rawResponse);
 
-                std::string card = "http://localhost:18080/card?id=" + std::to_string(p.id);
-                std::string msg = u8"Название: " + p.name + "\nОписание: " + p.description + "\n\nСсылка: " + card;
-                if (!p.image_url.empty())
-                    bot.getApi().sendPhoto(chatId, p.image_url, msg);
-                else
-                    bot.getApi().sendMessage(chatId, msg);
 
-                cpr::Response allResp = cpr::Get(cpr::Url{ "http://localhost:18080/api/products" });
-                std::vector<Product> all;
+            if (r.status_code == 200) {
+                try {
+                    auto j = json::parse(jsonString);
+                    Product target;
+                    target.id = j.value("id", -1);
+                    target.name = j.value("name", "");
+                    target.description = j.value("description", "");
+                    target.brand = j.value("brand", "");
+                    target.image_url = j.value("image_url", "");
+                    target.category_name = j.value("category", "");
 
-                if (allResp.status_code == 200) {
-                    auto arr = json::parse(ProductService::cleanJson(allResp.text));
-                    for (const auto& item : arr) {
-                        Product q;
-                        q.id = item.value("id", -1);
-                        q.name = item.value("name", "");
-                        q.description = item.value("description", "");
-                        q.brand = item.value("brand", "");
-                        q.image_url = item.value("image_url", "");
-                        q.category_name = item.value("category", "");
-                        if (q.id > 0) all.push_back(q);
+                    if (target.id > 0 && !target.name.empty()) {
+                        std::string productUrl = "http://localhost:18080/card?id=" + std::to_string(productId);
+                        std::string messageText = u8"Название: " + target.name + "\n" +
+                            u8"Описание: " + target.description + "\n\n" +
+                            u8"Ссылка на товар: " + productUrl;
+
+                        if (!target.image_url.empty()) {
+                            bot.getApi().sendPhoto(chatId, target.image_url, messageText);
+                        }
+                        else {
+                            bot.getApi().sendMessage(chatId, messageText);
+                        }
+
+                        cpr::Response allResp = cpr::Get(cpr::Url{ "http://localhost:18080/api/products" });
+                        std::vector<Product> allProducts;
+
+                        if (allResp.status_code == 200) {
+                            std::string cleanedAll = cleanJson(allResp.text);
+                            auto allJson = json::parse(cleanedAll);
+                            for (const auto& item : allJson) {
+                                Product p;
+                                p.id = item.value("id", -1);
+                                p.name = item.value("name", "");
+                                p.description = item.value("description", "");
+                                p.brand = item.value("brand", "");
+                                p.image_url = item.value("image_url", "");
+                                p.category_name = item.value("category", "");
+                                if (p.id > 0) {
+                                    allProducts.push_back(p);
+                                }
+                            }
+                        }
+                        else {
+                            bot.getApi().sendMessage(chatId, u8"⚠️ Не удалось загрузить список всех товаров.");
+                        }
+
+                        users[chatId].currentProduct = target;
+                        users[chatId].allProducts = allProducts;
+
+                        auto getProductMenuKeyboard = []() -> TgBot::InlineKeyboardMarkup::Ptr {
+                            TgBot::InlineKeyboardMarkup::Ptr keyboard(new TgBot::InlineKeyboardMarkup);
+
+                            std::vector<TgBot::InlineKeyboardButton::Ptr> row1;
+                            TgBot::InlineKeyboardButton::Ptr btnSimilar(new TgBot::InlineKeyboardButton);
+                            btnSimilar->text = u8"🔄 Похожие товары";
+                            btnSimilar->callbackData = "similar_products";
+                            row1.push_back(btnSimilar);
+
+                            TgBot::InlineKeyboardButton::Ptr btnMatch(new TgBot::InlineKeyboardButton);
+                            btnMatch->text = u8"👕 С чем сочетать";
+                            btnMatch->callbackData = "match_products";
+                            row1.push_back(btnMatch);
+                            keyboard->inlineKeyboard.push_back(row1);
+
+
+                            std::vector<TgBot::InlineKeyboardButton::Ptr> row2;
+                            TgBot::InlineKeyboardButton::Ptr btnCare(new TgBot::InlineKeyboardButton);
+                            btnCare->text = u8"🧼 Как ухаживать";
+                            btnCare->callbackData = "care_tips";
+                            row2.push_back(btnCare);
+                            keyboard->inlineKeyboard.push_back(row2);
+
+                            std::vector<TgBot::InlineKeyboardButton::Ptr> rowNav;
+                            TgBot::InlineKeyboardButton::Ptr btnBack(new TgBot::InlineKeyboardButton);
+                            btnBack->text = u8"⬅️ Назад к поиску";
+                            btnBack->callbackData = "back_to_search";
+                            rowNav.push_back(btnBack);
+
+                            TgBot::InlineKeyboardButton::Ptr btnMenu(new TgBot::InlineKeyboardButton);
+                            btnMenu->text = u8"🏠 Главное меню";
+                            btnMenu->callbackData = "main_menu";
+                            rowNav.push_back(btnMenu);
+                            keyboard->inlineKeyboard.push_back(rowNav);
+
+                            return keyboard;
+                            };
+
+                        bot.getApi().sendMessage(chatId, u8"Выберите действие:", false, 0, getProductMenuKeyboard());
                     }
+                    else {
+                        bot.getApi().sendMessage(chatId, u8"❌ Товар с таким ID не найден.");
+                    }
+
                 }
-
-                users[chatId].currentProduct = p;
-                users[chatId].allProducts = all;
-                users[chatId].awaitingProductId = false;
-
-                bot.getApi().sendMessage(chatId, u8"Выберите действие:", false, 0, KeyboardFactory::getProductMenuKeyboard());
-
+                catch (const std::exception& e) {
+                    std::cout << u8"[ERROR] JSON parse error: " << e.what() << std::endl;
+                    bot.getApi().sendMessage(chatId, u8"⚠️ Ошибка при обработке данных товара.");
+                }
             }
-            catch (...) {
-                bot.getApi().sendMessage(chatId, u8"⚠️ Ошибка при обработке JSON.");
+            else {
+                bot.getApi().sendMessage(chatId, u8"⚠️ Ошибка при запросе товара с сервера.");
             }
+
+            users[chatId].awaitingProductId = false;
         }
-        else {
-            bot.getApi().sendMessage(chatId, u8"⚠️ Ошибка получения товара с сервера.");
+        catch (...) {
+            bot.getApi().sendMessage(chatId, u8"❌ Введите корректный номер товара.");
         }
     }
     else {
