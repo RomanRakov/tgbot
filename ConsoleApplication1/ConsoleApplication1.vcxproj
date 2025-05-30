@@ -132,10 +132,25 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BotHandler.cpp" />
+    <ClCompile Include="DailyTipScheduler.cpp" />
+    <ClCompile Include="KeyboardFactory.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="ProductService.cpp" />
+    <ClCompile Include="QuestionnaireService.cpp" />
+    <ClCompile Include="StyleService.cpp" />
+    <ClCompile Include="UserService.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BotHandler.h" />
+    <ClInclude Include="DailyTipScheduler.h" />
+    <ClInclude Include="KeyboardFactory.h" />
+    <ClInclude Include="Product.h" />
+    <ClInclude Include="ProductService.h" />
+    <ClInclude Include="QuestionnaireService.h" />
     <ClInclude Include="SQLite\sqlite3.h" />
+    <ClInclude Include="StyleService.h" />
+    <ClInclude Include="UserService.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
