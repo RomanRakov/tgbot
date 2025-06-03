@@ -32,7 +32,10 @@ void DailyTipScheduler::run() {
                         const auto& tips = styleService.getTips(style);
 
                         if (!tips.empty()) {
-                            std::string tip = tips[rand() % tips.size()];
+                            std::random_device rd;
+                            std::mt19937 gen(rd());
+                            std::uniform_int_distribution<> dis(0, tips.size() - 1);
+                            std::string tip = tips[dis(gen)];
                             try {
                                 bot.getApi().sendMessage(chatId, tip);
                             }
