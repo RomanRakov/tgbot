@@ -1,4 +1,4 @@
-﻿#include "BotHandler.h"
+#include "BotHandler.h"
 #include <iostream>
 #include <cpr/cpr.h>
 #include <nlohmann/json.hpp>
@@ -36,7 +36,6 @@ std::string cleanJson(const std::string& raw) {
     return raw.substr(startPos);
 };
 
-
 BotHandler::BotHandler(const std::string& token, sqlite3* db)
     : bot(token), db(db),
     userService(db),
@@ -68,10 +67,6 @@ void BotHandler::start() {
 }
 
 void BotHandler::setupHandlers() {
-    bot.getEvents().onCommand("start", [this](TgBot::Message::Ptr message) {
-        handleStart(message);
-        });
-
     bot.getEvents().onCallbackQuery([this](TgBot::CallbackQuery::Ptr query) {
         handleCallbackQuery(query);
         });
@@ -79,15 +74,6 @@ void BotHandler::setupHandlers() {
     bot.getEvents().onAnyMessage([this](TgBot::Message::Ptr message) {
         handleMessage(message);
         });
-}
-
-void BotHandler::handleStart(TgBot::Message::Ptr message) {
-    int64_t chatId = message->chat->id;
-    userService.addUser(chatId);
-    users[chatId] = UserState(); 
-    bot.getApi().sendMessage(chatId,
-        u8"✨ Привет! Я твой личный помощник по стилю.\n\nЧто ты хочешь сделать?",
-        false, 0, KeyboardFactory::getMainMenuKeyboard());
 }
 
 void BotHandler::handleCallbackQuery(TgBot::CallbackQuery::Ptr query) {
@@ -124,7 +110,6 @@ void BotHandler::handleCallbackQuery(TgBot::CallbackQuery::Ptr query) {
         char answer = data[7];
         questionnaire.recordAnswer(chatId, answer);
         int step = ++users[chatId].step;
-
 
         try {
             bot.getApi().deleteMessage(chatId, previousQuestionMessageIds[chatId]);
@@ -187,7 +172,6 @@ void BotHandler::handleCallbackQuery(TgBot::CallbackQuery::Ptr query) {
             chatId, msgId, "", "Markdown", false,
             KeyboardFactory::getSettingsKeyboard(!current));
     }
-
     else if (data == "similar_products") {
         if (users.count(chatId) && !users[chatId].currentProduct.name.empty()) {
             const auto& target = users[chatId].currentProduct;
@@ -205,9 +189,7 @@ void BotHandler::handleCallbackQuery(TgBot::CallbackQuery::Ptr query) {
                         bot.getApi().sendMessage(chatId, msg);
                 }
                 bot.getApi().sendMessage(chatId, u8"Выберите следующее действие:", false, 0, KeyboardFactory::getBackAndMenuKeyboard());
-
             }
-
             else {
                 bot.getApi().sendMessage(chatId, u8"🔎 Похожие товары не найдены.");
             }
@@ -231,7 +213,6 @@ void BotHandler::handleCallbackQuery(TgBot::CallbackQuery::Ptr query) {
                         bot.getApi().sendMessage(chatId, msg);
                 }
                 bot.getApi().sendMessage(chatId, u8"Выберите следующее действие:", false, 0, KeyboardFactory::getBackAndMenuKeyboard());
-
             }
             else {
                 bot.getApi().sendMessage(chatId, u8"❌ Ничего не найдено.");
@@ -271,17 +252,13 @@ void BotHandler::handleCallbackQuery(TgBot::CallbackQuery::Ptr query) {
             bot.getApi().sendMessage(chatId, u8"❌ Нет активного товара.");
         }
     }
-
     else if (data == "back_to_search") {
         users[chatId].awaitingProductId = true;
         bot.getApi().sendMessage(chatId, u8"📦 Введите ID товара для поиска:");
     }
-
     else if (data == "back_to_product_menu") {
         bot.getApi().sendMessage(chatId, u8"Выберите действие:", false, 0, KeyboardFactory::getProductMenuKeyboard());
     }
-
-
 
     bot.getApi().answerCallbackQuery(query->id);
 }
@@ -289,6 +266,15 @@ void BotHandler::handleCallbackQuery(TgBot::CallbackQuery::Ptr query) {
 void BotHandler::handleMessage(TgBot::Message::Ptr message) {
     int64_t chatId = message->chat->id;
     if (message->text.empty()) return;
+
+    if (users.find(chatId) == users.end()) {
+        userService.addUser(chatId);
+        users[chatId] = UserState(); 
+        bot.getApi().sendMessage(chatId,
+            u8"✨ Привет! Я твой личный помощник по стилю.\n\nЧто ты хочешь сделать?",
+            false, 0, KeyboardFactory::getMainMenuKeyboard());
+        return;
+    }
 
     if (users[chatId].awaitingProductId) {
         std::string input = message->text;
@@ -310,7 +296,6 @@ void BotHandler::handleMessage(TgBot::Message::Ptr message) {
 
             std::string rawResponse = r.text;
             std::string jsonString = cleanJson(rawResponse);
-
 
             if (r.status_code == 200) {
                 try {
@@ -377,7 +362,6 @@ void BotHandler::handleMessage(TgBot::Message::Ptr message) {
                             row1.push_back(btnMatch);
                             keyboard->inlineKeyboard.push_back(row1);
 
-
                             std::vector<TgBot::InlineKeyboardButton::Ptr> row2;
                             TgBot::InlineKeyboardButton::Ptr btnCare(new TgBot::InlineKeyboardButton);
                             btnCare->text = u8"🧼 Как ухаживать";
@@ -398,14 +382,13 @@ void BotHandler::handleMessage(TgBot::Message::Ptr message) {
                             keyboard->inlineKeyboard.push_back(rowNav);
 
                             return keyboard;
-                            };
+                        };
 
                         bot.getApi().sendMessage(chatId, u8"Выберите действие:", false, 0, getProductMenuKeyboard());
                     }
                     else {
                         bot.getApi().sendMessage(chatId, u8"❌ Товар с таким ID не найден.");
                     }
-
                 }
                 catch (const std::exception& e) {
                     std::cout << u8"[ERROR] JSON parse error: " << e.what() << std::endl;
@@ -421,9 +404,6 @@ void BotHandler::handleMessage(TgBot::Message::Ptr message) {
         catch (...) {
             bot.getApi().sendMessage(chatId, u8"❌ Введите корректный номер товара.");
         }
-    }
-    else {
-        bot.getApi().sendMessage(chatId, u8"Нажми /start, чтобы начать.", false, 0, KeyboardFactory::getMainMenuKeyboard());
     }
 }
 
