@@ -30,6 +30,7 @@ private:
 
     UserService userService;
     StyleService styleService;
+    ProductService productService;
     QuestionnaireService questionnaire;
 
     std::map<int64_t, UserState> users;
