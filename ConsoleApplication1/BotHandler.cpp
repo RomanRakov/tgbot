@@ -8,34 +8,6 @@
 
 using json = nlohmann::json;
 
-std::string cleanJson(const std::string& raw) {
-    auto startPos = raw.find_first_of("{[");
-    if (startPos == std::string::npos) {
-        return "";
-    }
-
-    int depth = 0;
-    bool inString = false;
-    for (size_t i = startPos; i < raw.size(); ++i) {
-        char c = raw[i];
-        if (c == '"' && (i == 0 || raw[i - 1] != '\\')) {
-            inString = !inString;
-        }
-        if (!inString) {
-            if (c == '{' || c == '[') {
-                ++depth;
-            }
-            else if (c == '}' || c == ']') {
-                --depth;
-                if (depth == 0) {
-                    return raw.substr(startPos, i - startPos + 1);
-                }
-            }
-        }
-    }
-    return raw.substr(startPos);
-};
-
 BotHandler::BotHandler(const std::string& token, sqlite3* db)
     : bot(token), db(db),
     userService(db),
@@ -45,11 +17,6 @@ BotHandler::BotHandler(const std::string& token, sqlite3* db)
 }
 
 void BotHandler::start() {
-    std::thread tipThread([this]() {
-        handleDailyTips();
-        });
-    tipThread.detach();
-
     try {
         bot.getApi().deleteWebhook();
         std::cout << "Webhook deleted." << std::endl;
@@ -135,7 +102,8 @@ void BotHandler::handleCallbackQuery(TgBot::CallbackQuery::Ptr query) {
             ss << u8"✅ Готово!\n\n" << styleName << "\n\n" << styleDescription << "\n\n";
             auto percentages = questionnaire.getAnswerPercentages(chatId);
             ss << u8"📊 Распределение:\n";
-            ss << "A: " << std::fixed << std::setprecision(1) << percentages['A'] << "%\n";
+            ss << std::fixed << std::setprecision(1);
+            ss << "A: " << percentages['A'] << "%\n";
             ss << "B: " << percentages['B'] << "%\n";
             ss << "C: " << percentages['C'] << "%\n";
             ss << "D: " << percentages['D'] << "%\n";
@@ -183,8 +151,9 @@ void BotHandler::handleCallbackQuery(TgBot::CallbackQuery::Ptr query) {
                 for (const auto& p : matches) {
                     std::string url = u8"http://localhost:18080/card?id=" + std::to_string(p.id);
                     std::string msg = u8"• " + p.name + "\n" + p.description + "\n" + url;
-                    if (!p.image_url.empty())
-                        bot.getApi().sendPhoto(chatId, p.image_url, msg);
+                    if (!p.image_url.empty()) {
+                        bot.getApi().sendPhoto(chatId, p.image_url);
+                    }
                     else
                         bot.getApi().sendMessage(chatId, msg);
                 }
@@ -285,17 +254,13 @@ void BotHandler::handleMessage(TgBot::Message::Ptr message) {
             return;
         }
 
-        int productId = std::stoi(input);
-        std::string url = "http://localhost:18080/api/product/" + std::to_string(productId);
-        cpr::Response r = cpr::Get(cpr::Url{ url });
-
         try {
             int productId = std::stoi(input);
             std::string apiUrl = "http://localhost:18080/api/product/" + std::to_string(productId);
             cpr::Response r = cpr::Get(cpr::Url{ apiUrl });
 
             std::string rawResponse = r.text;
-            std::string jsonString = cleanJson(rawResponse);
+            std::string jsonString = productService.cleanJson(rawResponse);
 
             if (r.status_code == 200) {
                 try {
@@ -311,7 +276,6 @@ void BotHandler::handleMessage(TgBot::Message::Ptr message) {
                     if (target.id > 0 && !target.name.empty()) {
                         std::string productUrl = "http://localhost:18080/card?id=" + std::to_string(productId);
                         std::string messageText = u8"Название: " + target.name + "\n" +
-                            u8"Описание: " + target.description + "\n\n" +
                             u8"Ссылка на товар: " + productUrl;
 
                         if (!target.image_url.empty()) {
@@ -325,7 +289,7 @@ void BotHandler::handleMessage(TgBot::Message::Ptr message) {
                         std::vector<Product> allProducts;
 
                         if (allResp.status_code == 200) {
-                            std::string cleanedAll = cleanJson(allResp.text);
+                            std::string cleanedAll = productService.cleanJson(allResp.text);
                             auto allJson = json::parse(cleanedAll);
                             for (const auto& item : allJson) {
                                 Product p;
@@ -404,37 +368,5 @@ void BotHandler::handleMessage(TgBot::Message::Ptr message) {
         catch (...) {
             bot.getApi().sendMessage(chatId, u8"❌ Введите корректный номер товара.");
         }
-    }
-}
-
-void BotHandler::handleDailyTips() {
-    while (true) {
-        std::time_t t = std::time(nullptr) + 3 * 3600;
-        std::tm now;
-        gmtime_s(&now, &t);
-        if (now.tm_hour == 20 && now.tm_min == 0) {
-            std::string sql = "SELECT chat_id, style FROM users WHERE daily_tips_enabled = 1 AND style IS NOT NULL;";
-            sqlite3_stmt* stmt;
-            if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
-                while (sqlite3_step(stmt) == SQLITE_ROW) {
-                    int64_t chatId = sqlite3_column_int64(stmt, 0);
-                    const char* styleChar = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-                    if (styleChar && strlen(styleChar) == 1) {
-                        char style = styleChar[0];
-                        const auto& tips = styleService.getTips(style);
-                        if (!tips.empty()) {
-                            std::string tip = tips[rand() % tips.size()];
-                            try {
-                                bot.getApi().sendMessage(chatId, tip);
-                            }
-                            catch (...) {}
-                        }
-                    }
-                }
-                sqlite3_finalize(stmt);
-            }
-            std::this_thread::sleep_for(std::chrono::seconds(60));
-        }
-        std::this_thread::sleep_for(std::chrono::seconds(30));
     }
 }
