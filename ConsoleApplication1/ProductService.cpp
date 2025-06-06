@@ -2,19 +2,17 @@
 #include <sstream>
 #include <algorithm>
 #include <map>
+#include <boost/locale.hpp>
 
-static std::string toLowerASCII(const std::string& str) {
-    std::string result = str;
-    std::transform(result.begin(), result.end(), result.begin(),
-        [](unsigned char c) -> char {
-            if (c >= 'A' && c <= 'Z') return c + 32;
-            return static_cast<char>(c);
-        });
-    return result;
+std::string toLowerUnicode(const std::string& str) {
+    using namespace boost::locale;
+    generator gen;
+    std::locale loc = gen("ru_RU.UTF-8");
+    return to_lower(str, loc);
 }
 
 std::set<std::string> ProductService::tokenize(const std::string& text) {
-    std::istringstream stream(toLowerASCII(text));
+    std::istringstream stream(toLowerUnicode(text));
     std::set<std::string> tokens;
     std::string word;
     while (stream >> word) {
@@ -58,14 +56,14 @@ std::vector<Product> ProductService::findCompatibleProductsAdvanced(
     std::vector<Product> matches;
 
     std::set<std::string> targetTokens = tokenize(target.name + " " + target.description);
-    std::string targetBrandLower = toLowerASCII(target.brand);
+    std::string targetBrandLower = toLowerUnicode(target.brand);
 
     for (const auto& p : allProducts) {
         if (p.id == target.id) continue;
 
         int score = 0;
 
-        if (toLowerASCII(p.brand) == targetBrandLower) score += 3;
+        if (toLowerUnicode(p.brand) == targetBrandLower) score += 3;
         if (p.category_name == target.category_name) score += 2;
 
         std::set<std::string> productTokens = tokenize(p.name + " " + p.description);
@@ -88,12 +86,17 @@ std::vector<Product> ProductService::findCompatibleByCategoryFlexible(
     const std::vector<Product>& allProducts
 ) {
     static const std::map<std::string, std::vector<std::string>> compatibleCategoriesMap = {
-        {"��������", {"�����", "���������"}},
-        {"�������", {"�����", "�����"}},
-        {"������", {"������", "�����"}},
-        {"������", {"������", "�������"}},
-        {"�����", {"��������", "���������"}},
-        {"���������", {"��������", "�����"}}
+        {"Верхняя одежда", {"Повседневная одежда"}},
+        {"Повседневная одежда", {"Домашняя одежда", "Обувь"}},
+        {"Спортивная и активная одежда", {"Обувь"}},
+        {"Офисная / деловая одежда", {"Мужская одежда", "Женская одежда"}},
+        {"Вечерняя и торжественная одежда", {"Женская одежда"}},
+        {"Мужская одежда", {"Обувь"}},
+        {"Женская одежда", {"Обувь"}},
+        {"Детская одежда", {"Повседневная одежда", "Обувь"}},
+        {"Трендовая одежда", {"Повседневная одежда", "Обувь"}},
+        {"Домашняя одежда", {"Обувь"}},
+        {"Обувь", {"Домашняя одежда", "Трендовая одежда", "Детская одежда"}}
     };
 
     std::vector<Product> compatibleProducts;
