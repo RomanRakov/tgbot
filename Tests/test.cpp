@@ -5,37 +5,53 @@
 #include "../ConsoleApplication1/QuestionnaireService.h"
 
 
-TEST(ProductServiceTest, FindByCategoryFlexible) {
-    Product target{ 1, "Футболка белая", "Простая хлопковая футболка", "Nike", "", "", 0, 0, "Футболки" };
+TEST(ProductServiceTest, CompatibleCategoriesMappedFound) {
+    Product target;
+    target.id = 1;
+    target.category_name = "Р’РµСЂС…РЅСЏСЏ РѕРґРµР¶РґР°";
 
-    std::vector<Product> all = {
-        {2, "Брюки черные", "Узкие брюки", "Adidas", "", "", 0, 0, "Брюки"},
-        {3, "Кроссовки белые", "Спортивная обувь", "Puma", "", "", 0, 0, "Кроссовки"},
-        {4, "Пиджак", "Офисный стиль", "Zara", "", "", 0, 0, "Пиджаки"}
-    };
+    Product match;
+    match.id = 2;
+    match.category_name = "РџРѕРІСЃРµРґРЅРµРІРЅР°СЏ РѕРґРµР¶РґР°";
 
-    auto results = ProductService::findCompatibleByCategoryFlexible(target, all);
+    Product other;
+    other.id = 3;
+    other.category_name = "РћР±СѓРІСЊ";
 
-    ASSERT_EQ(results.size(), 2);
-    EXPECT_EQ(results[0].category_name, "Брюки");
-    EXPECT_EQ(results[1].category_name, "Кроссовки");
+    std::vector<Product> all = { target, match, other };
+
+    auto result = ProductService::findCompatibleByCategoryFlexible(target, all);
+
+    ASSERT_EQ(result.size(), 1);
+    EXPECT_EQ(result[0].id, match.id);
 }
 
-TEST(ProductServiceTest, FindByBrandAndDescription) {
-    Product target{ 1, "Футболка белая", "Хлопок, мягкая", "Nike", "", "", 0, 0, "Футболки" };
+TEST(ProductServiceTest, CompatibleCategoriesFallbackUsed) {
+    Product target;
+    target.id = 1;
+    target.category_name = "РќРµРёР·РІРµСЃС‚РЅР°СЏ РєР°С‚РµРіРѕСЂРёСЏ";
 
-    std::vector<Product> all = {
-        {2, "Футболка черная", "Мягкая ткань, хлопок", "Nike", "", "", 0, 0, "Футболки"},
-        {3, "Шорты", "Лёгкие, летние", "Puma", "", "", 0, 0, "Шорты"},
-        {4, "Футболка", "Жесткий полиэстер", "Adidas", "", "", 0, 0, "Футболки"}
-    };
+    Product p2;
+    p2.id = 2;
+    p2.category_name = "РћР±СѓРІСЊ";
 
-    auto results = ProductService::findCompatibleProductsAdvanced(target, all);
+    Product p3;
+    p3.id = 3;
+    p3.category_name = "РћР±СѓРІСЊ"; 
 
-    ASSERT_EQ(results.size(), 1);
-    EXPECT_EQ(results[0].brand, "Nike");
+    Product p4;
+    p4.id = 4;
+    p4.category_name = "РџРѕРІСЃРµРґРЅРµРІРЅР°СЏ РѕРґРµР¶РґР°";
+
+    std::vector<Product> all = { target, p2, p3, p4 };
+
+    auto result = ProductService::findCompatibleByCategoryFlexible(target, all);
+
+    ASSERT_EQ(result.size(), 2);
+    std::set<int> resultIds = { result[0].id, result[1].id };
+    EXPECT_TRUE(resultIds.count(2));
+    EXPECT_TRUE(resultIds.count(4));
 }
-
 
 TEST(QuestionnaireServiceTest, CalculateDominantStyle) {
     QuestionnaireService service;
